@@ -6,21 +6,31 @@ pub struct PaymentRouter;
 
 #[contractimpl]
 impl PaymentRouter {
-    
+    const FEE_BPS: i128 = 40;
+    const BPS_DIVISOR: i128 = 10_000;
+    const XLM_DECIMALS: i128 = 10_000_000;
+    const FEE_CAP_XLM: i128 = 30;
+    const FEE_CAP: i128 = Self::FEE_CAP_XLM * Self::XLM_DECIMALS;
+
     pub fn route_payment(
         env: Env,
         sender: Address,
         recipient: Address,         // For fiat withdrawals, this is the Anchor's wallet
         platform_treasury: Address,
         token_address: Address,     // The ID of the asset being sent (e.g., NGNC or USDC)
-        amount: i128,          
-        fee_percent: i128,     
+        amount: i128,
     ) {
         // 1. Verify the sender authorized this transaction
         sender.require_auth();
 
         // 2. Calculate the split
-        let fee_amount = (amount * fee_percent) / 100;
+        let mut fee_amount = (amount * Self::FEE_BPS) / Self::BPS_DIVISOR;
+        if fee_amount > Self::FEE_CAP {
+            fee_amount = Self::FEE_CAP;
+        }
+        if fee_amount > amount {
+            fee_amount = amount;
+        }
         let recipient_amount = amount - fee_amount;
 
         // 3. Initialize the token client for the specific currency

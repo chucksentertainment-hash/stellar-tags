@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import freighterApi from '@stellar/freighter-api'
 import * as StellarSdk from 'stellar-sdk'
 
-const CONTRACT_ID = 'CB5FYOCWBQA2PI3DQDFOTW5BSIVIMHBOVBBNXRBOASRFWWPRVRTVFXA2'
+const CONTRACT_ID = 'CDNQ7OMHIFOLZHOKWQLOGDW7CF3DRMKXJC6OULNGNBWF4O4NO2NEIGER'
 const TREASURY_ADDRESS = 'GAAFWEZKDYPXLTQGKQ3F23TXWYQUDAYTDW7P7VUQSVJFW2GWC4Y6LWST'
 const TOKEN_ADDRESS = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC'
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
@@ -480,7 +480,6 @@ function Dashboard({
         StellarSdk.nativeToScVal(TREASURY_ADDRESS, { type: 'address' }),
         StellarSdk.nativeToScVal(TOKEN_ADDRESS, { type: 'address' }),
         StellarSdk.nativeToScVal(Math.floor(amountValue * 10000000), { type: 'i128' }),
-        StellarSdk.nativeToScVal(2, { type: 'i128' }),
       ]
 
       const server = new StellarSdk.rpc.Server('https://soroban-testnet.stellar.org')
@@ -810,6 +809,7 @@ function HelpPage({
   canRegister,
 }) {
   const [isNavOpen, setIsNavOpen] = useNavState()
+  const [activeHelpAction, setActiveHelpAction] = useState('')
   const closeNav = () => {
     sessionStorage.setItem(NAV_STORAGE_KEY, 'false')
     setIsNavOpen(false)
@@ -818,6 +818,43 @@ function HelpPage({
     sessionStorage.setItem(NAV_STORAGE_KEY, 'false')
     setIsNavOpen(false)
     action()
+  }
+
+  const helpContent = {
+    identity: (
+      <div className="help-action-content">
+        <p>
+          Our platform uses a Federation Server. This acts as a decentralized phonebook that maps
+          your easy-to-read name tag directly to your cryptographic public key.
+        </p>
+        <div className="help-action-block">
+          <strong>The Process:</strong>
+          <ol>
+            <li>Navigate to the Profile page.</li>
+            <li>Connect your Freighter Wallet to verify ownership.</li>
+            <li>Enter your desired username and click Claim.</li>
+          </ol>
+        </div>
+        <p className="help-action-note">
+          Note: Once claimed, your name tag is permanent and can be shared with anyone on the
+          network to receive instant payments.
+        </p>
+      </div>
+    ),
+    troubleshooting: (
+      <div className="help-action-content">
+        <p>
+          <strong>Simulation Failed:</strong> If the dashboard says "Simulation Failed," it usually
+          means the smart contract rejected the logic. Ensure you aren't trying to send more XLM
+          than you actually have in your balance (including the 0.4% fee, capped at 30 XLM).
+        </p>
+        <p>
+          <strong>Wallet Locked:</strong> If the Freighter popup doesn't appear, check the
+          extension icon in your browser. If it has a red dot or says "Locked," you must re-enter
+          your password before the dashboard can request a signature.
+        </p>
+      </div>
+    ),
   }
   return (
     <div className={`dashboard ${isNavOpen ? 'nav-open' : ''}`}>
@@ -881,10 +918,32 @@ function HelpPage({
               <div className="help-search-glow" aria-hidden="true" />
             </div>
             <div className="help-actions">
-              <button type="button">Claim Identity</button>
-              <button type="button">Smart Routing</button>
-              <button type="button">Troubleshooting</button>
+                <button
+                  type="button"
+                  className={activeHelpAction === 'identity' ? 'is-active' : ''}
+                  onClick={() =>
+                    setActiveHelpAction((prev) => (prev === 'identity' ? '' : 'identity'))
+                  }
+                >
+                  Claim Identity
+                </button>
+                <button type="button">Smart Routing</button>
+                <button
+                  type="button"
+                  className={activeHelpAction === 'troubleshooting' ? 'is-active' : ''}
+                  onClick={() =>
+                    setActiveHelpAction((prev) => (prev === 'troubleshooting' ? '' : 'troubleshooting'))
+                  }
+                >
+                  Troubleshooting
+                </button>
             </div>
+              <div
+                className={`help-action-panel ${activeHelpAction ? 'is-visible' : ''}`}
+                aria-live="polite"
+              >
+                {helpContent[activeHelpAction] ?? null}
+              </div>
             <div className="help-status">
               <span className="status-dot" aria-hidden="true" />
               Stellar Testnet: Operational
