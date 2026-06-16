@@ -4,7 +4,7 @@ import freighterApi from '@stellar/freighter-api'
 const CONTRACT_ID = 'CDNQ7OMHIFOLZHOKWQLOGDW7CF3DRMKXJC6OULNGNBWF4O4NO2NEIGER'
 const TREASURY_ADDRESS = 'GAAFWEZKDYPXLTQGKQ3F23TXWYQUDAYTDW7P7VUQSVJFW2GWC4Y6LWST'
 const TOKEN_ADDRESS = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC'
-const API_BASE = "stellar-tags-production.up.railway.app";
+const API_BASE = "https://stellar-tags-production.up.railway.app";
 const DEFAULT_FEDERATION_DOMAIN = 'localhost'
 const HORIZON_BASE = 'https://horizon-testnet.stellar.org'
 const ANALYTICS_WINDOW_MS = 60 * 60 * 1000
