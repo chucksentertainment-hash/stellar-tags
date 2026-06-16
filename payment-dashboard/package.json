@@ -10,10 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@stellar/freighter-api": "^6.0.1",
+    "@stellar/freighter-api": "^2.0.0",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "stellar-sdk": "^13.3.0"
+    "stellar-sdk": "^12.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
