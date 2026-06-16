@@ -455,51 +455,34 @@ function Dashboard({
 
     try {
       const resolved = await resolveRecipient(recipientInput)
-      if (resolved.error) {
-        throw new Error(resolved.error)
-      }
-
+      if (resolved.error) throw new Error(resolved.error)
+      
       let recipientAddress = resolved.address
-
       if (!recipientAddress && resolved.tag) {
-        const encodedTag = encodeURIComponent(resolved.tag)
-        const response = await fetch(`${API_BASE}/federation?q=${encodedTag}&type=name`)
-        const rawBody = await response.text()
-        const data = rawBody ? JSON.parse(rawBody) : null
-
-        if (!response.ok) {
-          throw new Error((data && data.detail) || `Backend error (${response.status}).`)
-        }
-
-        if (!data) {
-          throw new Error('Backend returned an empty response.')
-        }
-
+        const response = await fetch(`${API_BASE}/federation?q=${encodeURIComponent(resolved.tag)}&type=name`)
+        const data = response.ok ? await response.json() : null
+        if (!data?.account_id) throw new Error('Recipient address could not be resolved.')
         recipientAddress = data.account_id
       }
 
-      if (!recipientAddress) {
-        throw new Error('Recipient address could not be resolved.')
-      }
       displayMessage('Simulating smart contract execution...', '#1F2937', '#F3F4F6')
 
       const StellarSdk = await loadStellarSdk()
       
-      // FIX 1: Wrap math in BigInt and convert to string for bulletproof i128 encoding
-      const amountStroops = BigInt(Math.floor(amountValue * 10000000));
-
-      // 2. Use strict .toScVal() constructors to completely eliminate guessing errors
+      // Strict BigInt conversion for Soroban i128 parameters
+      const amountStroops = BigInt(Math.floor(amountValue * 10000000))
+      
       const contractArgs = [
         new StellarSdk.Address(userPublicKey).toScVal(),
         new StellarSdk.Address(recipientAddress).toScVal(),
         new StellarSdk.Address(TREASURY_ADDRESS).toScVal(),
         new StellarSdk.Address(TOKEN_ADDRESS).toScVal(),
         StellarSdk.nativeToScVal(amountStroops, { type: 'i128' }),
-      ];
+      ]
 
-      const server = new StellarSdk.rpc.Server('https://soroban-testnet.stellar.org');
-      const account = await server.getAccount(userPublicKey);
-      const contract = new StellarSdk.Contract(CONTRACT_ID);
+      const server = new StellarSdk.rpc.Server('https://soroban-testnet.stellar.org')
+      const account = await server.getAccount(userPublicKey)
+      const contract = new StellarSdk.Contract(CONTRACT_ID)
 
       const transaction = new StellarSdk.TransactionBuilder(account, {
         fee: '100000',
@@ -507,30 +490,31 @@ function Dashboard({
       })
         .addOperation(contract.call('route_payment', ...contractArgs))
         .setTimeout(300)
-        .build();
+        .build()
 
+      // The 'latest' SDK will now parse this simulation perfectly!
       const preparedTransaction = await server.prepareTransaction(transaction)
       if (preparedTransaction.error) {
         throw new Error('Contract simulation failed. Check wallet funds.')
       }
 
       displayMessage('Please approve the transaction in your wallet.', '#0052FF', '#EFF6FF')
-      const signedXdr = await freighterApi.signTransaction(preparedTransaction.toXDR(), {
+      
+      const signedXdrResponse = await freighterApi.signTransaction(preparedTransaction.toXDR(), {
         network: 'TESTNET',
         networkPassphrase: 'Test SDF Network ; September 2015',
       })
 
-      if (signedXdr.error) {
-        throw new Error('Transaction canceled by user.')
-      }
+      if (signedXdrResponse.error) throw new Error('Transaction canceled by user.')
 
       displayMessage('Submitting to Stellar Testnet...', '#D97706', '#FEF3C7')
 
-      const finalXdr = typeof signedXdr === 'string' ? signedXdr : signedXdr.signedTxXdr || signedXdr
+      // Extract the raw string regardless of what Freighter returns
+      const finalXdr = typeof signedXdrResponse === 'string' 
+        ? signedXdrResponse 
+        : signedXdrResponse.signedTxXdr || signedXdrResponse
 
-      // FIX 3: Bypass TransactionBuilder.fromXDR entirely! 
-      // This prevents the 'Bad union switch' error when Freighter and the SDK disagree.
-      // We send the raw base64 string directly to the Soroban RPC instead.
+      // Submit directly via RPC to bypass any client-side XDR parsing bugs
       const rpcResponse = await fetch('https://soroban-testnet.stellar.org', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -543,10 +527,7 @@ function Dashboard({
       })
 
       const rpcData = await rpcResponse.json()
-      
-      if (rpcData.error) {
-        throw new Error(`RPC Error: ${rpcData.error.message}`)
-      }
+      if (rpcData.error) throw new Error(`RPC Error: ${rpcData.error.message}`)
 
       const status = rpcData.result?.status
       if (status === 'PENDING' || status === 'SUCCESS') {

@@ -13,7 +13,7 @@
     "@stellar/freighter-api": "^6.0.1",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
-    "stellar-sdk": "^12.2.0"
+    "stellar-sdk": "latest"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
