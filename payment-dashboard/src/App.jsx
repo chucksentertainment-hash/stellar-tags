@@ -15,7 +15,7 @@ const ANALYTICS_REFRESH_MS = 60 * 1000
 let stellarSdkPromise
 const loadStellarSdk = () => {
   if (!stellarSdkPromise) {
-    stellarSdkPromise = import('stellar-sdk')
+    stellarSdkPromise = import('@stellar/stellar-sdk')
   }
 
   return stellarSdkPromise
