@@ -198,8 +198,7 @@ const etagCache = (req, res, next) => {
   next();
 };
 
-app.get('/federation', etagCache, (req, res) => {
-app.get('/federation', async (req, res) => {
+app.get('/federation', etagCache, async (req, res) => {
   const nameTag = normalizeNameTag(req.query.q);
 
   if (!nameTag) {
@@ -284,7 +283,7 @@ app.get('/lookup', async (req, res) => {
   }
 });
 
-app.get('/users', (req, res) => {
+app.get('/users', async (req, res) => {
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
   const search = typeof req.query.search === 'string' ? `%${req.query.search}%` : null;
@@ -293,21 +292,20 @@ app.get('/users', (req, res) => {
   const where = search ? 'WHERE username LIKE ? OR address LIKE ?' : '';
   const params = search ? [search, search] : [];
 
-  db.get(`SELECT COUNT(*) AS total FROM username_registry ${where}`, params, (err, countRow) => {
-    if (err) return res.status(500).json({ detail: 'Database error' });
-
+  try {
+    const countRow = await poolGet(`SELECT COUNT(*) AS total FROM username_registry ${where}`, params);
     const totalCount = countRow.total;
     const totalPages = Math.ceil(totalCount / limit);
 
-    db.all(
+    const rows = await poolAll(
       `SELECT username, address, created_at FROM username_registry ${where} LIMIT ? OFFSET ?`,
-      [...params, limit, offset],
-      (err, rows) => {
-        if (err) return res.status(500).json({ detail: 'Database error' });
-        res.json({ data: rows, totalCount, totalPages, currentPage: page });
-      },
+      [...params, limit, offset]
     );
-  });
+
+    res.json({ data: rows, totalCount, totalPages, currentPage: page });
+  } catch (err) {
+    return res.status(500).json({ detail: 'Database error' });
+  }
 });
 
 app.get('/health', (_req, res) => {
@@ -338,17 +336,7 @@ if (require.main === module) {
       process.exit(1);
     }
   });
-    const server = app.listen(PORT, '0.0.0.0', () => {
-        console.log(`Server successfully initialized on port ${PORT}`);
-    });
-
-    // This catches any weird cloud port errors and prevents a hard crash
-    server.on('error', (e) => {
-        if (e.code === 'EADDRINUSE') {
-            console.error(`Port ${PORT} is in use, forcing shutdown so Railway can restart cleanly.`);
-            process.exit(1);
-        }
-    });
+    
 
     // Graceful shutdown — drain the connection pool
     const shutdown = async () => {
