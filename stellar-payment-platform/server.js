@@ -224,6 +224,32 @@ app.get('/lookup', async (req, res) => {
   }
 });
 
+app.get('/users', (req, res) => {
+  const page = Math.max(1, parseInt(req.query.page) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
+  const search = typeof req.query.search === 'string' ? `%${req.query.search}%` : null;
+  const offset = (page - 1) * limit;
+
+  const where = search ? 'WHERE username LIKE ? OR address LIKE ?' : '';
+  const params = search ? [search, search] : [];
+
+  db.get(`SELECT COUNT(*) AS total FROM username_registry ${where}`, params, (err, countRow) => {
+    if (err) return res.status(500).json({ detail: 'Database error' });
+
+    const totalCount = countRow.total;
+    const totalPages = Math.ceil(totalCount / limit);
+
+    db.all(
+      `SELECT username, address, created_at FROM username_registry ${where} LIMIT ? OFFSET ?`,
+      [...params, limit, offset],
+      (err, rows) => {
+        if (err) return res.status(500).json({ detail: 'Database error' });
+        res.json({ data: rows, totalCount, totalPages, currentPage: page });
+      },
+    );
+  });
+});
+
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
