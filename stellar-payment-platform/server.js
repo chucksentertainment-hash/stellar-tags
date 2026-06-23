@@ -1,14 +1,38 @@
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
+require('dotenv').config();
+
 const { Prisma } = require('@prisma/client');
 const { prisma } = require('./prismaClient');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+// Ensure to add the value for STELLAR_TAG_DOMAIN in the env file
+const STELLAR_TAG_DOMAIN = process.env.STELLAR_TAG_DOMAIN;
 
 
-app.use(cors());
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://stellar-tags.vercel.app',
+  STELLAR_TAG_DOMAIN,
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
+
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+  optionsSuccessStatus: 204,
+};
+
+app.use(cors(corsOptions));
 // #49 — Enforce strict 10kb JSON payload size limit to prevent DoS via oversized payloads
 app.use(express.json({ limit: '10kb' }));
 
