@@ -9,7 +9,8 @@ const PORT = process.env.PORT || 5000;
 
 
 app.use(cors());
-app.use(express.json());
+// #49 — Enforce strict 10kb JSON payload size limit to prevent DoS via oversized payloads
+app.use(express.json({ limit: '10kb' }));
 
 const USER_DATABASE = {
   'client*localhost': 'GAPUQZH3WZUXHEMUGZN5ZYU4D4GHCFEMOGUINU6MF345GBD2QXNYYIEQ',
@@ -136,6 +137,18 @@ app.get('/lookup', (req, res) => {
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+// #49 — Error handling middleware for payload size limit violations
+// Express emits a 'entity.too.large' error type when the JSON body exceeds the limit.
+// This middleware catches it and returns a clean 413 JSON response.
+app.use((err, _req, res, _next) => {
+  if (err.type === 'entity.too.large') {
+    return res.status(413).json({
+      detail: 'Payload too large. Maximum allowed size is 10kb.',
+    });
+  }
+  return res.status(500).json({ detail: 'Internal server error' });
 });
 
 if (require.main === module) {
