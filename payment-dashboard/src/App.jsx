@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import freighterApi from '@stellar/freighter-api'
+import { useDebounce } from './useDebounce'
 
 const CONTRACT_ID = 'CDNQ7OMHIFOLZHOKWQLOGDW7CF3DRMKXJC6OULNGNBWF4O4NO2NEIGER'
 const TREASURY_ADDRESS = 'GAAFWEZKDYPXLTQGKQ3F23TXWYQUDAYTDW7P7VUQSVJFW2GWC4Y6LWST'
@@ -351,6 +352,7 @@ function Dashboard({
     action()
   }
   const [nameTag, setNameTag] = useState('')
+  const debouncedNameTag = useDebounce(nameTag, 300)
   const [amount, setAmount] = useState('')
   const [isProcessing, setIsProcessing] = useState(false)
   const [isReceiving, setIsReceiving] = useState(false)
@@ -424,6 +426,37 @@ function Dashboard({
 
     loadReceiveDetails()
   }, [userPublicKey])
+
+  useEffect(() => {
+    if (!debouncedNameTag || !userPublicKey) {
+      return
+    }
+
+    const searchRecipient = async () => {
+      try {
+        const resolved = await resolveRecipient(debouncedNameTag)
+        if (resolved.error) {
+          return
+        }
+
+        if (resolved.address) {
+          return
+        }
+
+        if (resolved.tag) {
+          const response = await fetch(`${API_BASE}/federation?q=${encodeURIComponent(resolved.tag)}&type=name`)
+          const data = response.ok ? await response.json() : null
+          if (!data?.account_id) {
+            return
+          }
+        }
+      } catch (error) {
+        // Silently fail on search errors during typing
+      }
+    }
+
+    searchRecipient()
+  }, [debouncedNameTag, userPublicKey])
 
   const handleConnect = async () => {
     const result = await onConnectWallet()
