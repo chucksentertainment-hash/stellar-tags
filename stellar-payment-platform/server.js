@@ -3,6 +3,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
+const { scheduleCleanupJob } = require('./src/cleanup-cron');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -40,6 +41,9 @@ db.serialize(() => {
     )`,
   );
 });
+
+// Start the weekly background job that prunes/flags stale registrations.
+scheduleCleanupJob(db);
 
 app.get('/federation', (req, res) => {
   const nameTag = normalizeNameTag(req.query.q);
