@@ -127,6 +127,20 @@ function App() {
   const [activeView, setActiveView] = useState('dashboard')
   const [userPublicKey, setUserPublicKey] = useState('')
   const [registrationState, setRegistrationState] = useState('unknown')
+  const [isOffline, setIsOffline] = useState(!navigator.onLine)
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false)
+    const handleOffline = () => setIsOffline(true)
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
 
   const handleConnectWallet = async () => {
     const status = await freighterApi.isConnected()
@@ -252,78 +266,163 @@ function App() {
 
   if (activeView === 'register' && registrationState === 'new') {
     return (
-      <RegistrationPage
-        userPublicKey={userPublicKey}
-        setUserPublicKey={setUserPublicKey}
-        onBack={() => handleNavigate('dashboard')}
-        onRegistered={() => handleRegistrationStateChange('existing')}
-      />
+      <>
+        {isOffline && (
+          <div style={{
+            backgroundColor: '#DC2626',
+            color: '#FFFFFF',
+            padding: '12px 16px',
+            textAlign: 'center',
+            fontWeight: '500',
+            fontSize: '14px',
+            position: 'sticky',
+            top: 0,
+            zIndex: 1000,
+          }}>
+            ⚠️ You are currently offline. Transactions will fail.
+          </div>
+        )}
+        <RegistrationPage
+          userPublicKey={userPublicKey}
+          setUserPublicKey={setUserPublicKey}
+          onBack={() => handleNavigate('dashboard')}
+          onRegistered={() => handleRegistrationStateChange('existing')}
+        />
+      </>
     )
   }
 
   if (activeView === 'help') {
     return (
-      <HelpPage
-        userPublicKey={userPublicKey}
-        onConnectWallet={handleConnectWallet}
-        onDisconnectWallet={handleDisconnectWallet}
-        onDashboardClick={() => handleNavigate('dashboard')}
-        onAnalyticsClick={() => handleNavigate('analytics')}
-        onHistoryClick={() => handleNavigate('history')}
-        onRegisterClick={() => handleNavigate('register')}
-        canRegister={registrationState === 'new'}
-      />
+      <>
+        {isOffline && (
+          <div style={{
+            backgroundColor: '#DC2626',
+            color: '#FFFFFF',
+            padding: '12px 16px',
+            textAlign: 'center',
+            fontWeight: '500',
+            fontSize: '14px',
+            position: 'sticky',
+            top: 0,
+            zIndex: 1000,
+          }}>
+            ⚠️ You are currently offline. Transactions will fail.
+          </div>
+        )}
+        <HelpPage
+          userPublicKey={userPublicKey}
+          onConnectWallet={handleConnectWallet}
+          onDisconnectWallet={handleDisconnectWallet}
+          onDashboardClick={() => handleNavigate('dashboard')}
+          onAnalyticsClick={() => handleNavigate('analytics')}
+          onHistoryClick={() => handleNavigate('history')}
+          onRegisterClick={() => handleNavigate('register')}
+          canRegister={registrationState === 'new'}
+        />
+      </>
     )
   }
 
   if (activeView === 'analytics') {
     return (
-      <AnalyticsPage
-        userPublicKey={userPublicKey}
-        onConnectWallet={handleConnectWallet}
-        onDisconnectWallet={handleDisconnectWallet}
-        onDashboardClick={() => handleNavigate('dashboard')}
-        onHistoryClick={() => handleNavigate('history')}
-        onHelpClick={() => handleNavigate('help')}
-        onRegisterClick={() => handleNavigate('register')}
-        canRegister={registrationState === 'new'}
-      />
+      <>
+        {isOffline && (
+          <div style={{
+            backgroundColor: '#DC2626',
+            color: '#FFFFFF',
+            padding: '12px 16px',
+            textAlign: 'center',
+            fontWeight: '500',
+            fontSize: '14px',
+            position: 'sticky',
+            top: 0,
+            zIndex: 1000,
+          }}>
+            ⚠️ You are currently offline. Transactions will fail.
+          </div>
+        )}
+        <AnalyticsPage
+          userPublicKey={userPublicKey}
+          onConnectWallet={handleConnectWallet}
+          onDisconnectWallet={handleDisconnectWallet}
+          onDashboardClick={() => handleNavigate('dashboard')}
+          onHistoryClick={() => handleNavigate('history')}
+          onHelpClick={() => handleNavigate('help')}
+          onRegisterClick={() => handleNavigate('register')}
+          canRegister={registrationState === 'new'}
+        />
+      </>
     )
   }
 
   if (activeView === 'history') {
     return (
-      <HistoryPage
-        userPublicKey={userPublicKey}
-        setUserPublicKey={setUserPublicKey}
-        onConnectWallet={handleConnectWallet}
-        onDisconnectWallet={handleDisconnectWallet}
-        onRefreshBalance={loadBalance}
-        onDashboardClick={() => handleNavigate('dashboard')}
-        onAnalyticsClick={() => handleNavigate('analytics')}
-        onHelpClick={() => handleNavigate('help')}
-        onRegisterClick={() => handleNavigate('register')}
-        canRegister={registrationState === 'new'}
-      />
+      <>
+        {isOffline && (
+          <div style={{
+            backgroundColor: '#DC2626',
+            color: '#FFFFFF',
+            padding: '12px 16px',
+            textAlign: 'center',
+            fontWeight: '500',
+            fontSize: '14px',
+            position: 'sticky',
+            top: 0,
+            zIndex: 1000,
+          }}>
+            ⚠️ You are currently offline. Transactions will fail.
+          </div>
+        )}
+        <HistoryPage
+          userPublicKey={userPublicKey}
+          setUserPublicKey={setUserPublicKey}
+          onConnectWallet={handleConnectWallet}
+          onDisconnectWallet={handleDisconnectWallet}
+          onRefreshBalance={loadBalance}
+          onDashboardClick={() => handleNavigate('dashboard')}
+          onAnalyticsClick={() => handleNavigate('analytics')}
+          onHelpClick={() => handleNavigate('help')}
+          onRegisterClick={() => handleNavigate('register')}
+          canRegister={registrationState === 'new'}
+        />
+      </>
     )
   }
 
   return (
-    <Dashboard
-      userPublicKey={userPublicKey}
-      onConnectWallet={handleConnectWallet}
-      onDisconnectWallet={handleDisconnectWallet}
-      balance={balance}
-      isRefreshing={isRefreshing}
-      balanceError={balanceError}
-      onRefreshBalance={loadBalance}
-      onRegisterClick={() => handleNavigate('register')}
-      onAnalyticsClick={() => handleNavigate('analytics')}
-      onHistoryClick={() => handleNavigate('history')}
-      onHelpClick={() => handleNavigate('help')}
-      onRegistrationStateChange={handleRegistrationStateChange}
-      canRegister={registrationState === 'new'}
-    />
+    <>
+      {isOffline && (
+        <div style={{
+          backgroundColor: '#DC2626',
+          color: '#FFFFFF',
+          padding: '12px 16px',
+          textAlign: 'center',
+          fontWeight: '500',
+          fontSize: '14px',
+          position: 'sticky',
+          top: 0,
+          zIndex: 1000,
+        }}>
+          ⚠️ You are currently offline. Transactions will fail.
+        </div>
+      )}
+      <Dashboard
+        userPublicKey={userPublicKey}
+        onConnectWallet={handleConnectWallet}
+        onDisconnectWallet={handleDisconnectWallet}
+        balance={balance}
+        isRefreshing={isRefreshing}
+        balanceError={balanceError}
+        onRefreshBalance={loadBalance}
+        onRegisterClick={() => handleNavigate('register')}
+        onAnalyticsClick={() => handleNavigate('analytics')}
+        onHistoryClick={() => handleNavigate('history')}
+        onHelpClick={() => handleNavigate('help')}
+        onRegistrationStateChange={handleRegistrationStateChange}
+        canRegister={registrationState === 'new'}
+      />
+    </>
   )
 }
 
