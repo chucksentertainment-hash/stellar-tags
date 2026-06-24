@@ -285,6 +285,7 @@ const { StrKey } = require('@stellar/stellar-sdk');
 app.post('/register', async (req, res, next) => {
   const username = normalizeNameTag(req.body.username);
   const address = typeof req.body.address === 'string' ? req.body.address.trim() : '';
+  const signature = typeof req.body.signature === 'string' ? req.body.signature.trim() : '';
 
   if (!username || !address) {
     return res.status(400).json({ error: 'Missing required fields: username and address are both required.' });
