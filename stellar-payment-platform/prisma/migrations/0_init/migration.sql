@@ -6,6 +6,7 @@ CREATE TABLE "username_registry" (
     "username" TEXT NOT NULL,
     "address" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "flagged_at" TIMESTAMP(3),
 
     CONSTRAINT "username_registry_pkey" PRIMARY KEY ("username")
 );
