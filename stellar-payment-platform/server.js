@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
+const { scheduleCleanupJob } = require('./src/cleanup-cron');
 const dotenv = require('dotenv');
 
 dotenv.config();
@@ -188,6 +189,25 @@ const normalizeNameTag = (value) => {
   return trimmed.includes('*') ? trimmed : `${trimmed}*${DEFAULT_FEDERATION_DOMAIN}`;
 };
 
+const dbPath = process.env.DB_PATH || path.join(__dirname, 'data', 'registrations.db');
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
+const db = new sqlite3.Database(dbPath);
+db.serialize(() => {
+  db.run(
+    `CREATE TABLE IF NOT EXISTS username_registry (
+      username TEXT PRIMARY KEY,
+      address TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    )`,
+  );
+});
+
+// Start the weekly background job that prunes/flags stale registrations.
+scheduleCleanupJob(db);
+
+app.get('/federation', (req, res) => {
+app.get('/federation', async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // #51 — ETag Caching Middleware for Federation Endpoint
