@@ -10,6 +10,9 @@ jobs:
   backend-checks:
     name: Backend Build & Test
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./stellar-payment-platform
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -19,6 +22,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
+          cache-dependency-path: ./stellar-payment-platform/package-lock.json
           
       - name: Install Backend Dependencies
         run: npm ci
