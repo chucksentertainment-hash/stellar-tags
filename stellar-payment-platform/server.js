@@ -284,7 +284,9 @@ app.post('/register', async (req, res, next) => {
       conflictError.statusCode = 409;
       return next(conflictError);
     }
-    return res.status(500).json({ detail: 'Failed to save registration' });
+    const registrationError = new Error('Failed to save registration');
+    registrationError.statusCode = 500;
+    return next(registrationError);
   }
 });
 
@@ -364,7 +366,17 @@ app.use((err, req, res, next) => {
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;
   const errorMessage = err.message || 'Internal server error';
-  
+
+  if (statusCode === 500) {
+    const errorId = crypto.randomUUID();
+    console.error(`[Error ID: ${errorId}]`, err);
+    return res.status(500).json({
+      success: false,
+      error: 'Internal Server Error',
+      reference_id: errorId
+    });
+  }
+
   return res.status(statusCode).json({
     success: false,
     error: errorMessage,
