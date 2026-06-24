@@ -814,6 +814,14 @@ function Dashboard({
                 )}
               </div>
             )}
+            {receiveStatus.text && (
+              <div
+                id="receive-status-box"
+                style={{ color: receiveStatus.color, backgroundColor: receiveStatus.bgColor }}
+              >
+                {receiveStatus.text}
+              </div>
+            )}
             {status.text && (
               <div
                 id="status-box"
