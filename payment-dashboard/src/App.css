@@ -207,8 +207,20 @@
 }
 
 .registration .helper-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   font-size: 12px;
   color: #64748b;
+}
+
+.registration .char-counter {
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.registration .char-counter--limit {
+  color: #991b1b;
 }
 
 .registration .primary-button {
@@ -514,4 +526,29 @@
   .help-title {
     font-size: 34px;
   }
+}
+
+.scroll-to-top {
+  position: fixed;
+  bottom: 80px;
+  right: 24px;
+  z-index: 100;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #0052FF;
+  color: #fff;
+  font-size: 1.2rem;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 82, 255, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.scroll-to-top:hover {
+  background: #003ecc;
+  transform: translateY(-2px);
 }

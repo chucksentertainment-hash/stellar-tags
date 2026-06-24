@@ -10,22 +10,26 @@ jobs:
   backend-checks:
     name: Backend Build & Test
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./stellar-payment-platform
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
-          
+          cache-dependency-path: ./stellar-payment-platform/package-lock.json
+
+
       - name: Install Backend Dependencies
         run: npm ci
-        
-      # If you add Jest tests later, uncomment the line below
-      # - name: Run Backend Tests
-      #   run: npm test
+
+      - name: Run Backend Tests
+        run: npm test
 
   frontend-checks:
     name: Frontend Vercel Build Check

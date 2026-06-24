@@ -3,18 +3,23 @@ const cors = require('cors');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { promisify } = require('util');
 const sqlite3 = require('sqlite3').verbose();
+const { Horizon } = require('@stellar/stellar-sdk');
+const PDFDocument = require('pdfkit');
+const { scheduleCleanupJob } = require('./src/cleanup-cron');
 const dotenv = require('dotenv');
 
 dotenv.config();
 
 const genericPool = require('generic-pool');
 
+const HORIZON_BASE = 'https://horizon-testnet.stellar.org';
+const TX_HASH_RE = /^[a-fA-F0-9]{64}$/;
+
 const app = express();
 const PORT = process.env.PORT || 5000;
-//Ensure to add the value for STELLAR_TAG_DOMAIN in the env file
 const STELLAR_TAG_DOMAIN = process.env.STELLAR_TAG_DOMAIN;
-
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -29,7 +34,6 @@ const corsOptions = {
     }
     return callback(null, false);
   },
-
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
@@ -38,20 +42,37 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json());
-
-app.use(cors());
 // #49 — Enforce strict 10kb JSON payload size limit to prevent DoS via oversized payloads
 app.use(express.json({ limit: '10kb' }));
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ error: 'Malformed JSON payload' });
+  }
+  next(err);
+});
 
-// ---------------------------------------------------------------------------
-// #50 — Database Connection Pooling
-// ---------------------------------------------------------------------------
-// Append connection_limit and pool_timeout to the connection string as
-// documented in the issue, then parse them to configure the pool.
+const isPrimitive = (v) => v === null || v === undefined || typeof v !== 'object';
+
+const rejectNestedObjects = (req, res, next) => {
+  const sources = [req.query, req.body];
+  for (const source of sources) {
+    if (source && typeof source === 'object') {
+      for (const val of Object.values(source)) {
+        if (!isPrimitive(val)) {
+          return res
+            .status(400)
+            .json({ detail: 'Invalid parameter type: nested objects and arrays are not allowed.' });
+        }
+      }
+    }
+  }
+  next();
+};
+
+app.use(rejectNestedObjects);
+
 const rawDbPath = process.env.DB_PATH || path.join(__dirname, 'data', 'registrations.db');
 
-// Parse optional pool parameters from the connection string
-// e.g. DB_PATH="./data/registrations.db?connection_limit=10&pool_timeout=5"
 const parseDbPath = (raw) => {
   const [filePath, queryString] = raw.split('?');
   const params = {};
@@ -71,17 +92,50 @@ const parseDbPath = (raw) => {
 const dbConfig = parseDbPath(rawDbPath);
 fs.mkdirSync(path.dirname(dbConfig.filePath), { recursive: true });
 
-// Create a connection pool for SQLite database handles using generic-pool.
-// Connections are recycled back to the pool rather than being opened/closed
-// on every request, which improves performance under concurrent load.
+const attachAsyncDbMethods = (db) => {
+  if (typeof db.get === 'function') {
+    db.getAsync = promisify(db.get.bind(db));
+  }
+  if (typeof db.run === 'function') {
+    db.runAsync = promisify(db.run.bind(db));
+  }
+  if (typeof db.all === 'function') {
+    db.allAsync = promisify(db.all.bind(db));
+  }
+  return db;
+};
+
+const getAsync = async (db, sql, params = []) => {
+  if (typeof db.getAsync === 'function') {
+    return db.getAsync(sql, params);
+  }
+  return promisify(db.get.bind(db))(sql, params);
+};
+
+const runAsync = async (db, sql, params = []) => {
+  if (typeof db.runAsync === 'function') {
+    return db.runAsync(sql, params);
+  }
+  return promisify(db.run.bind(db))(sql, params);
+};
+
+const allAsync = async (db, sql, params = []) => {
+  if (typeof db.allAsync === 'function') {
+    return db.allAsync(sql, params);
+  }
+  return promisify(db.all.bind(db))(sql, params);
+};
+
 const dbPool = genericPool.createPool(
   {
     create: () =>
       new Promise((resolve, reject) => {
         const connection = new sqlite3.Database(dbConfig.filePath, (err) => {
           if (err) return reject(err);
-          // Enable WAL mode for better concurrent read performance
-          connection.run('PRAGMA journal_mode=WAL', () => resolve(connection));
+          attachAsyncDbMethods(connection);
+          connection.runAsync('PRAGMA journal_mode=WAL')
+            .then(() => resolve(connection))
+            .catch(reject);
         });
       }),
     destroy: (connection) =>
@@ -90,51 +144,40 @@ const dbPool = genericPool.createPool(
       }),
   },
   {
-    max: dbConfig.connectionLimit,  // Maximum 10 active connections
-    min: 1,                         // Keep at least 1 idle connection
-    acquireTimeoutMillis: dbConfig.poolTimeout * 1000, // 5-second timeout
-    idleTimeoutMillis: 30000,       // Recycle idle connections after 30s
+    max: dbConfig.connectionLimit,
+    min: 1,
+    acquireTimeoutMillis: dbConfig.poolTimeout * 1000,
+    idleTimeoutMillis: 30000,
   },
 );
 
-// Helper: acquire a connection, run a query, and release back to pool
 const poolGet = (sql, params) =>
-  dbPool.acquire().then(
-    (conn) =>
-      new Promise((resolve, reject) => {
-        conn.get(sql, params, (err, row) => {
-          dbPool.release(conn);
-          if (err) return reject(err);
-          resolve(row);
-        });
-      }),
-  );
+  dbPool.acquire().then(async (conn) => {
+    try {
+      return await getAsync(conn, sql, params);
+    } finally {
+      dbPool.release(conn);
+    }
+  });
 
 const poolRun = (sql, params) =>
-  dbPool.acquire().then(
-    (conn) =>
-      new Promise((resolve, reject) => {
-        conn.run(sql, params, function runCb(err) {
-          dbPool.release(conn);
-          if (err) return reject(err);
-          resolve(this);
-        });
-      }),
-  );
+  dbPool.acquire().then(async (conn) => {
+    try {
+      return await runAsync(conn, sql, params);
+    } finally {
+      dbPool.release(conn);
+    }
+  });
 
 const poolAll = (sql, params) =>
-  dbPool.acquire().then(
-    (conn) =>
-      new Promise((resolve, reject) => {
-        conn.all(sql, params, (err, rows) => {
-          dbPool.release(conn);
-          if (err) return reject(err);
-          resolve(rows);
-        });
-      }),
-  );
+  dbPool.acquire().then(async (conn) => {
+    try {
+      return await allAsync(conn, sql, params);
+    } finally {
+      dbPool.release(conn);
+    }
+  });
 
-// Initialise the schema using a pooled connection
 (async () => {
   try {
     await poolRun(
@@ -164,18 +207,34 @@ const normalizeNameTag = (value) => {
   if (!trimmed) {
     return '';
   }
-
   return trimmed.includes('*') ? trimmed : `${trimmed}*${DEFAULT_FEDERATION_DOMAIN}`;
 };
 
+const dbPath = process.env.DB_PATH || path.join(__dirname, 'data', 'registrations.db');
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
+const db = attachAsyncDbMethods(new sqlite3.Database(dbPath));
+
+(async () => {
+  try {
+    await db.runAsync(
+      `CREATE TABLE IF NOT EXISTS username_registry (
+        username TEXT PRIMARY KEY,
+        address TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )`,
+    );
+  } catch (err) {
+    console.error('Failed to initialize direct database schema:', err);
+  }
+})();
+
+// Start the weekly background job that prunes/flags stale registrations.
+scheduleCleanupJob(db);
 
 // ---------------------------------------------------------------------------
 // #51 — ETag Caching Middleware for Federation Endpoint
 // ---------------------------------------------------------------------------
-// Generates a SHA-256 based ETag from the JSON response body.
-// If the client sends a matching If-None-Match header, the server responds
-// with 304 Not Modified without re-running the database query on subsequent
-// requests (Express caches the comparison after the first response).
 const etagCache = (req, res, next) => {
   const originalJson = res.json.bind(res);
 
@@ -186,7 +245,6 @@ const etagCache = (req, res, next) => {
 
     res.set('ETag', etag);
 
-    // Check If-None-Match header — return 304 if content hasn't changed
     const clientEtag = req.get('If-None-Match');
     if (clientEtag && clientEtag === etag) {
       return res.status(304).end();
@@ -198,12 +256,13 @@ const etagCache = (req, res, next) => {
   next();
 };
 
-app.get('/federation', etagCache, (req, res) => {
-app.get('/federation', async (req, res) => {
+app.get('/federation', etagCache, async (req, res, next) => {
   const nameTag = normalizeNameTag(req.query.q);
 
   if (!nameTag) {
-    return res.status(400).json({ detail: "Missing 'q' parameter" });
+    const error = new Error("Missing 'q' parameter");
+    error.statusCode = 400;
+    return next(error);
   }
 
   try {
@@ -214,7 +273,9 @@ app.get('/federation', async (req, res) => {
 
     const address = row?.address || USER_DATABASE[nameTag];
     if (!address) {
-      return res.status(404).json({ detail: 'Name tag not found' });
+      const notFoundError = new Error('Name tag not found');
+      notFoundError.statusCode = 404;
+      return next(notFoundError);
     }
 
     return res.json({
@@ -223,17 +284,28 @@ app.get('/federation', async (req, res) => {
       memo_type: 'text',
       memo: 'PlatformPayment',
     });
-  } catch {
-    return res.status(500).json({ detail: 'Database lookup failed' });
+  } catch (err) {
+    const dbError = new Error('Database lookup failed');
+    dbError.statusCode = 500;
+    return next(dbError);
   }
 });
 
-app.post('/register', async (req, res) => {
+const { StrKey } = require('@stellar/stellar-sdk');
+
+app.post('/register', async (req, res, next) => {
   const username = normalizeNameTag(req.body.username);
   const address = typeof req.body.address === 'string' ? req.body.address.trim() : '';
+  const signature = typeof req.body.signature === 'string' ? req.body.signature.trim() : '';
 
   if (!username || !address) {
-    return res.status(400).json({ detail: 'username and address are required' });
+    return res.status(400).json({ error: 'Missing required fields: username and address are both required.' });
+  }
+
+  if (!StrKey.isValidEd25519PublicKey(address)) {
+    const error = new Error('Invalid Stellar Public Key format.');
+    error.statusCode = 400;
+    return next(error);
   }
 
   try {
@@ -243,7 +315,9 @@ app.post('/register', async (req, res) => {
     );
 
     if (row) {
-      return res.status(409).json({ detail: 'Address already registered' });
+      const conflictError = new Error('Address already registered');
+      conflictError.statusCode = 409;
+      return next(conflictError);
     }
 
     await poolRun(
@@ -251,21 +325,26 @@ app.post('/register', async (req, res) => {
       [username, address, new Date().toISOString()],
     );
 
-    return res.json({ ok: true, username, address });
+    return res.status(201).json({ ok: true, username, address, federation_address: `${username}*${process.env.DOMAIN || 'localhost'}` });
   } catch (error) {
     if (error.message && error.message.includes('UNIQUE')) {
-      return res.status(409).json({ detail: 'Username already registered' });
+      const conflictError = new Error('Username already registered');
+      conflictError.statusCode = 409;
+      return next(conflictError);
     }
-
-    return res.status(500).json({ detail: 'Failed to save registration' });
+    const registrationError = new Error('Failed to save registration');
+    registrationError.statusCode = 500;
+    return next(registrationError);
   }
 });
 
-app.get('/lookup', async (req, res) => {
+app.get('/lookup', async (req, res, next) => {
   const address = typeof req.query.address === 'string' ? req.query.address.trim() : '';
 
   if (!address) {
-    return res.status(400).json({ detail: "Missing 'address' parameter" });
+    const error = new Error("Missing 'address' parameter");
+    error.statusCode = 400;
+    return next(error);
   }
 
   try {
@@ -275,16 +354,20 @@ app.get('/lookup', async (req, res) => {
     );
 
     if (!row) {
-      return res.status(404).json({ detail: 'Username not found for this address' });
+      const notFoundError = new Error('Username not found for this address');
+      notFoundError.statusCode = 404;
+      return next(notFoundError);
     }
 
     return res.json({ username: row.username, address });
-  } catch {
-    return res.status(500).json({ detail: 'Database lookup failed' });
+  } catch (err) {
+    const dbError = new Error('Database lookup failed');
+    dbError.statusCode = 500;
+    return next(dbError);
   }
 });
 
-app.get('/users', (req, res) => {
+app.get('/users', async (req, res, next) => {
   const page = Math.max(1, parseInt(req.query.page) || 1);
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 10));
   const search = typeof req.query.search === 'string' ? `%${req.query.search}%` : null;
@@ -293,73 +376,163 @@ app.get('/users', (req, res) => {
   const where = search ? 'WHERE username LIKE ? OR address LIKE ?' : '';
   const params = search ? [search, search] : [];
 
-  db.get(`SELECT COUNT(*) AS total FROM username_registry ${where}`, params, (err, countRow) => {
-    if (err) return res.status(500).json({ detail: 'Database error' });
-
+  try {
+    const countRow = await poolGet(`SELECT COUNT(*) AS total FROM username_registry ${where}`, params);
     const totalCount = countRow.total;
     const totalPages = Math.ceil(totalCount / limit);
 
-    db.all(
+    const rows = await poolAll(
       `SELECT username, address, created_at FROM username_registry ${where} LIMIT ? OFFSET ?`,
-      [...params, limit, offset],
-      (err, rows) => {
-        if (err) return res.status(500).json({ detail: 'Database error' });
-        res.json({ data: rows, totalCount, totalPages, currentPage: page });
-      },
+      [...params, limit, offset]
     );
-  });
+
+    res.json({ data: rows, totalCount, totalPages, currentPage: page });
+  } catch (err) {
+    const dbError = new Error('Database error');
+    dbError.statusCode = 500;
+    return next(dbError);
+  }
 });
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-// #49 — Error handling middleware for payload size limit violations
-// Express emits a 'entity.too.large' error type when the JSON body exceeds the limit.
-// This middleware catches it and returns a clean 413 JSON response.
-app.use((err, _req, res, _next) => {
+app.get('/api/v1/receipts/:txHash', async (req, res) => {
+  const { txHash } = req.params;
+
+  if (!TX_HASH_RE.test(txHash)) {
+    return res.status(400).json({ detail: 'Invalid transaction hash format' });
+  }
+
+  let tx;
+  let paymentOps;
+
+  try {
+    const server = new Horizon.Server(HORIZON_BASE);
+    [tx, paymentOps] = await Promise.all([
+      server.transactions().transaction(txHash).call(),
+      server.payments().forTransaction(txHash).call(),
+    ]);
+  } catch (err) {
+    if (err && err.response && err.response.status === 404) {
+      return res.status(404).json({ detail: 'Transaction not found' });
+    }
+    return res.status(500).json({ detail: 'Failed to fetch transaction' });
+  }
+
+  const timestamp = tx.created_at
+    ? new Date(tx.created_at).toUTCString()
+    : 'Unknown';
+
+  const nativeOp = (paymentOps.records || []).find(
+    (op) => op.asset_type === 'native',
+  );
+
+  const sender = nativeOp ? nativeOp.from : tx.source_account;
+  const receiver = nativeOp ? nativeOp.to : 'Contract invocation';
+  const amount = nativeOp ? `${nativeOp.amount} XLM` : 'See Stellar Explorer';
+
+  const safeHash = txHash.replace(/[^a-fA-F0-9]/g, '');
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="receipt-${safeHash}.pdf"`,
+  );
+
+  const doc = new PDFDocument({ margin: 50 });
+  doc.pipe(res);
+
+  doc
+    .fontSize(20)
+    .text('Stellar Transaction Receipt', { align: 'center' })
+    .moveDown(1.5);
+
+  doc.fontSize(11).text(`Transaction Hash: ${txHash}`).moveDown(0.5);
+  doc.text(`Timestamp:        ${timestamp}`).moveDown(0.5);
+  doc.text(`Sender:           ${sender}`).moveDown(0.5);
+  doc.text(`Receiver:         ${receiver}`).moveDown(0.5);
+  doc.text(`Amount:           ${amount}`).moveDown(1.5);
+
+  doc.fontSize(9).fillColor('#888888').text('Generated by Stellar Pay — Testnet', {
+    align: 'center',
+  });
+
+  doc.end();
+});
+
+app.use((err, req, res, next) => {
   if (err.type === 'entity.too.large') {
-    return res.status(413).json({
-      detail: 'Payload too large. Maximum allowed size is 10kb.',
+    const error = new Error('Payload too large. Maximum allowed size is 10kb.');
+    error.statusCode = 413;
+    return next(error);
+  }
+  next(err);
+});
+
+// Global error handling middleware
+app.use((err, req, res, next) => {
+  const statusCode = err.statusCode || 500;
+  const errorMessage = err.message || 'Internal server error';
+
+  if (statusCode === 500) {
+    const errorId = crypto.randomUUID();
+    console.error(`[Error ID: ${errorId}]`, err);
+    return res.status(500).json({
+      success: false,
+      error: 'Internal Server Error',
+      reference_id: errorId
     });
   }
-  return res.status(500).json({ detail: 'Internal server error' });
+
+  return res.status(statusCode).json({
+    success: false,
+    error: errorMessage,
+    statusCode: statusCode
+  });
 });
+
+const SHUTDOWN_TIMEOUT_MS = parseInt(process.env.SHUTDOWN_TIMEOUT_MS, 10) || 10_000;
+
+let isShuttingDown = false;
+
+const gracefulShutdown = (server, pool, signal) => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+
+  console.log(`\nReceived ${signal}. Shutting down gracefully...`);
+
+  const timer = setTimeout(() => {
+    console.error(`Graceful shutdown timed out after ${SHUTDOWN_TIMEOUT_MS / 1000}s, forcing exit.`);
+    process.exit(1);
+  }, SHUTDOWN_TIMEOUT_MS);
+
+  server.close(async () => {
+    clearTimeout(timer);
+    try {
+      await pool.drain();
+      await pool.clear();
+    } catch (err) {
+      console.error('Error draining DB pool during shutdown:', err);
+    }
+    process.exit(0);
+  });
+};
 
 if (require.main === module) {
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server successfully initialized on port ${PORT}`);
   });
 
-  // This catches any weird cloud port errors and prevents a hard crash
   server.on('error', (e) => {
     if (e.code === 'EADDRINUSE') {
       console.error(`Port ${PORT} is in use, forcing shutdown so Railway can restart cleanly.`);
       process.exit(1);
     }
   });
-    const server = app.listen(PORT, '0.0.0.0', () => {
-        console.log(`Server successfully initialized on port ${PORT}`);
-    });
 
-    // This catches any weird cloud port errors and prevents a hard crash
-    server.on('error', (e) => {
-        if (e.code === 'EADDRINUSE') {
-            console.error(`Port ${PORT} is in use, forcing shutdown so Railway can restart cleanly.`);
-            process.exit(1);
-        }
-    });
-
-    // Graceful shutdown — drain the connection pool
-    const shutdown = async () => {
-      console.log('\nShutting down gracefully...');
-      await dbPool.drain();
-      await dbPool.clear();
-      server.close(() => process.exit(0));
-    };
-    process.on('SIGTERM', shutdown);
-    process.on('SIGINT', shutdown);
+  process.on('SIGTERM', (sig) => gracefulShutdown(server, dbPool, sig));
+  process.on('SIGINT',  (sig) => gracefulShutdown(server, dbPool, sig));
 }
 
-// Export for testing and for the Horizon listener
-module.exports = { app, poolGet, poolAll };
+module.exports = { app, poolGet, poolAll, gracefulShutdown, rejectNestedObjects };
