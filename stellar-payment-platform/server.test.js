@@ -208,3 +208,178 @@ describe('rejectNestedObjects middleware', () => {
     expect(res.status).not.toHaveBeenCalled();
   });
 });
+
+describe('GET /lookup — pagination and search', () => {
+  let request;
+  let app;
+
+  const VALID_ADDRESS = 'GAPUQZH3WZUXHEMUGZN5ZYU4D4GHCFEMOGUINU6MF345GBD2QXNYYIEQ';
+
+  beforeEach(() => {
+    jest.resetModules();
+
+    jest.mock('dotenv', () => ({ config: jest.fn() }));
+    jest.mock('fs', () => ({ ...jest.requireActual('fs'), mkdirSync: jest.fn() }));
+    jest.mock('@stellar/stellar-sdk', () => ({ Horizon: { Server: jest.fn() }, StrKey: { isValidEd25519PublicKey: jest.fn(() => true) } }));
+    jest.mock('pdfkit', () => jest.fn());
+    jest.mock('./src/cleanup-cron', () => ({ scheduleCleanupJob: jest.fn() }));
+
+    jest.mock('sqlite3', () => ({
+      verbose: () => ({
+        Database: jest.fn().mockImplementation((_path, cb) => {
+          const db = { run: jest.fn((sql, cb2) => cb2 && cb2(null)), close: jest.fn((cb2) => cb2 && cb2()) };
+          if (cb) cb(null);
+          return db;
+        }),
+      }),
+    }));
+
+    const mockConn = {
+      run: jest.fn((sql, params, cb) => {
+        const fn = typeof params === 'function' ? params : cb;
+        if (fn) fn.call({ lastID: 0, changes: 0 }, null);
+      }),
+      get: jest.fn((sql, params, cb) => {
+        const fn = typeof params === 'function' ? params : cb;
+        if (sql.includes('COUNT(*)')) {
+          if (fn) fn(null, { total: 2 });
+        } else if (sql.includes('WHERE address =')) {
+          if (fn) fn(null, { username: 'alice*localhost' });
+        } else {
+          if (fn) fn(null, null);
+        }
+      }),
+      all: jest.fn((sql, params, cb) => {
+        const fn = typeof params === 'function' ? params : cb;
+        const rows = [
+          { username: 'alice*localhost', address: VALID_ADDRESS, created_at: '2024-01-01T00:00:00.000Z' },
+          { username: 'bob*localhost', address: 'GBOB0000000000000000000000000000000000000000000000000000', created_at: '2024-01-02T00:00:00.000Z' },
+        ];
+        if (fn) fn(null, rows);
+      }),
+    };
+
+    jest.mock('generic-pool', () => ({
+      createPool: jest.fn(() => ({
+        acquire: jest.fn().mockResolvedValue(mockConn),
+        release: jest.fn(),
+        drain: jest.fn().mockResolvedValue(undefined),
+        clear: jest.fn().mockResolvedValue(undefined),
+      })),
+    }));
+
+    ({ app } = require('./server'));
+    request = require('supertest');
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('returns 400 when neither address nor search is provided', async () => {
+    const res = await request(app).get('/lookup');
+    expect(res.status).toBe(400);
+  });
+
+  test('exact address lookup returns single record (backward compat)', async () => {
+    const res = await request(app).get(`/lookup?address=${VALID_ADDRESS}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ username: 'alice*localhost', address: VALID_ADDRESS });
+    expect(res.body).not.toHaveProperty('data');
+  });
+
+  test('search mode returns paginated metadata block', async () => {
+    const res = await request(app).get('/lookup?search=alice&page=1&limit=10');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('data');
+    expect(res.body).toHaveProperty('totalCount');
+    expect(res.body).toHaveProperty('totalPages');
+    expect(res.body).toHaveProperty('currentPage', 1);
+  });
+
+  test('search mode defaults page to 1 and limit to 10 when omitted', async () => {
+    const res = await request(app).get('/lookup?search=alice');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ currentPage: 1 });
+  });
+});
+
+describe('GET /users — pagination and search', () => {
+  let request;
+  let app;
+
+  beforeEach(() => {
+    jest.resetModules();
+
+    jest.mock('dotenv', () => ({ config: jest.fn() }));
+    jest.mock('fs', () => ({ ...jest.requireActual('fs'), mkdirSync: jest.fn() }));
+    jest.mock('@stellar/stellar-sdk', () => ({ Horizon: { Server: jest.fn() }, StrKey: { isValidEd25519PublicKey: jest.fn(() => true) } }));
+    jest.mock('pdfkit', () => jest.fn());
+    jest.mock('./src/cleanup-cron', () => ({ scheduleCleanupJob: jest.fn() }));
+
+    jest.mock('sqlite3', () => ({
+      verbose: () => ({
+        Database: jest.fn().mockImplementation((_path, cb) => {
+          const db = { run: jest.fn((sql, cb2) => cb2 && cb2(null)), close: jest.fn((cb2) => cb2 && cb2()) };
+          if (cb) cb(null);
+          return db;
+        }),
+      }),
+    }));
+
+    const mockConn = {
+      run: jest.fn((sql, params, cb) => {
+        const fn = typeof params === 'function' ? params : cb;
+        if (fn) fn.call({ lastID: 0, changes: 0 }, null);
+      }),
+      get: jest.fn((sql, params, cb) => {
+        const fn = typeof params === 'function' ? params : cb;
+        if (fn) fn(null, { total: 25 });
+      }),
+      all: jest.fn((sql, params, cb) => {
+        const fn = typeof params === 'function' ? params : cb;
+        const rows = Array.from({ length: 10 }, (_, i) => ({
+          username: `user${i}*localhost`,
+          address: `G${'A'.repeat(55)}${i}`,
+          created_at: '2024-01-01T00:00:00.000Z',
+        }));
+        if (fn) fn(null, rows);
+      }),
+    };
+
+    jest.mock('generic-pool', () => ({
+      createPool: jest.fn(() => ({
+        acquire: jest.fn().mockResolvedValue(mockConn),
+        release: jest.fn(),
+        drain: jest.fn().mockResolvedValue(undefined),
+        clear: jest.fn().mockResolvedValue(undefined),
+      })),
+    }));
+
+    ({ app } = require('./server'));
+    request = require('supertest');
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('returns paginated metadata block with default page and limit', async () => {
+    const res = await request(app).get('/users');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ totalCount: 25, currentPage: 1 });
+    expect(Array.isArray(res.body.data)).toBe(true);
+  });
+
+  test('respects explicit page and limit query params', async () => {
+    const res = await request(app).get('/users?page=3&limit=5');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ currentPage: 3 });
+  });
+
+  test('accepts search query param without error', async () => {
+    const res = await request(app).get('/users?search=alice');
+    expect(res.status).toBe(200);
+    expect(res.body).toHaveProperty('data');
+  });
+});
