@@ -2,8 +2,10 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react'
 import freighterApi from '@stellar/freighter-api'
 import { useLatencyTracker } from './useLatencyTracker'
 import LatencyGauge from './LatencyGauge'
+import NetworkBadge from './NetworkBadge'
 import { useDebounce } from './useDebounce'
 import ScrollToTop from './ScrollToTop'
+import LoadingSpinner from './components/LoadingSpinner'
 
 
 const CONTRACT_ID = 'CDNQ7OMHIFOLZHOKWQLOGDW7CF3DRMKXJC6OULNGNBWF4O4NO2NEIGER'
@@ -764,7 +766,7 @@ function Dashboard({
             </p>
           </div>
           <div className="topbar-actions">
-            <span className="chip">Testnet</span>
+            <NetworkBadge />
             <LatencyGauge 
               latency={latencyTracker.latency}
               status={latencyTracker.status}
@@ -1436,7 +1438,7 @@ function AnalyticsPage({
             <p className="subtle">Verified proof of every route, settlement speed, and platform success.</p>
           </div>
           <div className="topbar-actions">
-            <span className="chip">Testnet</span>
+            <NetworkBadge />
             <div className="wallet-menu" ref={menuRef}>
               <button
                 type="button"
@@ -1736,7 +1738,7 @@ function HistoryPage({
           </div>
           <div className="topbar-actions">
             <span className="chip">Last 24 hours</span>
-            <span className="chip">Testnet</span>
+            <NetworkBadge />
             <div className="wallet-menu" ref={menuRef}>
               <button
                 type="button"
@@ -1953,7 +1955,7 @@ function MobileNav({
   )
 }
 
-const USERNAME_REGEX = /^[a-zA-Z0-9_\-]+$/
+const USERNAME_REGEX = /^[a-zA-Z0-9_-]+$/
 
 function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistered }) {
   const [username, setUsername] = useState('')
