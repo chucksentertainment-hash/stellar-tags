@@ -43,6 +43,28 @@ app.use(cors());
 // #49 — Enforce strict 10kb JSON payload size limit to prevent DoS via oversized payloads
 app.use(express.json({ limit: '10kb' }));
 
+// #36 — Reject requests where any query/body value is a non-primitive (object or array).
+// Blocks operator-injection patterns like { "$ne": "" } reaching the query layer.
+const isPrimitive = (v) => v === null || v === undefined || typeof v !== 'object';
+
+const rejectNestedObjects = (req, res, next) => {
+  const sources = [req.query, req.body];
+  for (const source of sources) {
+    if (source && typeof source === 'object') {
+      for (const val of Object.values(source)) {
+        if (!isPrimitive(val)) {
+          return res
+            .status(400)
+            .json({ detail: 'Invalid parameter type: nested objects and arrays are not allowed.' });
+        }
+      }
+    }
+  }
+  next();
+};
+
+app.use(rejectNestedObjects);
+
 // ---------------------------------------------------------------------------
 // #50 — Database Connection Pooling
 // ---------------------------------------------------------------------------
@@ -350,4 +372,4 @@ if (require.main === module) {
 }
 
 // Export for testing and for the Horizon listener
-module.exports = { app, poolGet, poolAll };
+module.exports = { app, poolGet, poolAll, rejectNestedObjects };

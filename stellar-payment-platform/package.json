@@ -6,7 +6,11 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "listener": "node horizonListener.js"
+    "listener": "node horizonListener.js",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^16.0.1",
