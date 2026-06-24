@@ -18,6 +18,7 @@ const HORIZON_BASE = 'https://horizon-testnet.stellar.org';
 const TX_HASH_RE = /^[a-fA-F0-9]{64}$/;
 
 const app = express();
+app.set('query parser', 'simple');
 const PORT = process.env.PORT || 5000;
 const STELLAR_TAG_DOMAIN = process.env.STELLAR_TAG_DOMAIN;
 
