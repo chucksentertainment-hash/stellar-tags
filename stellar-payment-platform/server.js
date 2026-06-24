@@ -308,6 +308,11 @@ app.get('/users', async (req, res) => {
   }
 });
 
+app.get('/.well-known/stellar.toml', cors({ origin: '*' }), (_req, res) => {
+  res.setHeader('Content-Type', 'text/plain');
+  res.send('FEDERATION_SERVER="https://stellar-tags-production.up.railway.app/federation"\n');
+});
+
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
