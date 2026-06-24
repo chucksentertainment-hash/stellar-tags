@@ -1953,8 +1953,11 @@ function MobileNav({
   )
 }
 
+const USERNAME_REGEX = /^[a-zA-Z0-9_\-]+$/
+
 function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistered }) {
   const [username, setUsername] = useState('')
+  const [usernameError, setUsernameError] = useState('')
   const [status, setStatus] = useState({
     text: 'Connect a wallet to begin your registration.',
     tone: 'neutral',
@@ -2033,6 +2036,11 @@ function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistere
 
     if (cleaned.length < 3) {
       setStatusMessage('Username must be at least 3 characters.', 'error')
+      return
+    }
+
+    if (!USERNAME_REGEX.test(cleaned)) {
+      setStatusMessage('Username may only contain letters, numbers, hyphens, and underscores.', 'error')
       return
     }
 
@@ -2139,8 +2147,23 @@ function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistere
               type="text"
               placeholder="stellarname"
               value={username}
-              onChange={(event) => setUsername(event.target.value)}
+              onChange={(event) => {
+                const val = event.target.value
+                setUsername(val)
+                if (val && !USERNAME_REGEX.test(val)) {
+                  setUsernameError('Only letters, numbers, hyphens, and underscores are allowed.')
+                } else {
+                  setUsernameError('')
+                }
+              }}
+              aria-describedby={usernameError ? 'username-error' : undefined}
+              aria-invalid={!!usernameError}
             />
+            {usernameError && (
+              <span id="username-error" className="field-error" role="alert">
+                {usernameError}
+              </span>
+            )}
           </label>
           <div className="helper-row">
             <span>3-18 characters, letters and numbers recommended.</span>
@@ -2148,7 +2171,7 @@ function RegistrationPage({ userPublicKey, setUserPublicKey, onBack, onRegistere
               {username.length} / 30
             </span>
           </div>
-          <button className="primary-button" type="submit" disabled={isSubmitting}>
+          <button className="primary-button" type="submit" disabled={isSubmitting || !!usernameError}>
             {isSubmitting ? <LoadingSpinner /> : 'Reserve username'}
           </button>
         </form>

@@ -552,3 +552,10 @@
   background: #003ecc;
   transform: translateY(-2px);
 }
+
+.field-error {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  color: #DC2626;
+}
