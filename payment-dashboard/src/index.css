@@ -663,6 +663,20 @@ button.disconnect-button:hover:not(:disabled) {
   background-color: #0e61d9;
 }
 
+.form-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.form-actions button {
+  margin-top: 0;
+}
+
+.form-actions .accent-btn {
+  flex: 1;
+}
+
 .wallet-status {
   color: #0f766e;
   margin-top: 10px;
