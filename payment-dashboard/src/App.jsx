@@ -618,7 +618,7 @@ function Dashboard({
           <h1>Stellar Pay</h1>
         </div>
         <div className="nav">
-          <button type="button" onClick={closeNav}>Dashboard</button>
+          <button type="button" aria-current="page" onClick={closeNav}>Dashboard</button>
           <button type="button" onClick={() => handleNav(onHistoryClick)}>History</button>
           <button type="button" onClick={() => handleNav(onAnalyticsClick)}>Analytics</button>
           <button type="button" onClick={() => handleNav(onHelpClick)}>Help</button>
