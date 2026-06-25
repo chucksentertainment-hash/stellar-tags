@@ -345,6 +345,10 @@ app.post('/register', async (req, res, next) => {
   const address = typeof req.body.address === 'string' ? req.body.address.trim() : '';
   const signature = typeof req.body.signature === 'string' ? req.body.signature.trim() : '';
 
+  if (address.toUpperCase().startsWith('S')) {
+    return res.status(400).json({ error: "Never share your Secret Key. Please register using your Public Key (starts with G)." });
+  }
+
   if (!username || !address) {
     return res.status(400).json({ error: 'Missing required fields: username and address are both required.' });
   }
