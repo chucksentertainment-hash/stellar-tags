@@ -378,6 +378,49 @@ describe('POST /register — block secret keys', () => {
     expect(res.status).toBe(415);
     expect(res.body).toEqual({
       error: "Unsupported Media Type. Please send application/json"
+  test('rejects 1-character local username payload', async () => {
+    const res = await request(app)
+      .post('/register')
+      .send({ username: 'a', address: 'GBCDEFGHIJKLMNOPQRSTUVWXYZ' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      error: "Username must be at least 3 characters long."
+    });
+  });
+
+  test('rejects 2-character local username payload', async () => {
+    const res = await request(app)
+      .post('/register')
+      .send({ username: 'ab', address: 'GBCDEFGHIJKLMNOPQRSTUVWXYZ' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      error: "Username must be at least 3 characters long."
+    });
+  });
+
+  test('rejects 2-character local username payload with domain suffix', async () => {
+    const res = await request(app)
+      .post('/register')
+      .send({ username: 'ab*domain.com', address: 'GBCDEFGHIJKLMNOPQRSTUVWXYZ' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      error: "Username must be at least 3 characters long."
+    });
+  });
+
+  test('allows 3-character username payload', async () => {
+    const res = await request(app)
+      .post('/register')
+      .send({ username: 'abc', address: 'GBCDEFGHIJKLMNOPQRSTUVWXYZ' });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      ok: true,
+      username: 'abc*localhost',
+      address: 'GBCDEFGHIJKLMNOPQRSTUVWXYZ'
     });
   });
 });

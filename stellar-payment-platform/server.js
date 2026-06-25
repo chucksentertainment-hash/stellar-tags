@@ -218,6 +218,11 @@ app.post('/register', async (req, res, next) => {
     return res.status(400).json({ error: 'Missing required fields: username and address are both required.' });
   }
 
+  const usernameLocalPart = username.includes('*') ? username.split('*')[0] : username;
+  if (usernameLocalPart.length < 3) {
+    return res.status(400).json({ error: "Username must be at least 3 characters long." });
+  }
+
   if (!StrKey.isValidEd25519PublicKey(address)) {
     const error = new Error('Invalid Stellar Public Key format.');
     error.statusCode = 400;
@@ -509,7 +514,23 @@ const gracefulShutdown = (server, pool, signal) => {
     process.exit(0);
   });
 };
+app.use((err, req, res, next) => {
+  // 1. Print the full error stack trace to the console (Viewable in Vercel Logs)
+  console.error('\n❌ CRITICAL BACKEND ERROR:');
+  console.error(err.stack);
+  console.error('============================\n');
 
+  // 2. Determine the status code (default to 500 Internal Server Error)
+  const statusCode = err.statusCode || 500;
+
+  // 3. Send a clean JSON response to the frontend so the request doesn't hang forever
+  res.status(statusCode).json({
+    success: false,
+    message: err.message || 'Internal Server Error',
+    // Only send the raw error details to the frontend if you are testing locally
+    detail: process.env.NODE_ENV === 'development' ? err.stack : 'Check server logs for details'
+  });
+});
 if (require.main === module) {
   const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server successfully initialized on port ${PORT}`);
