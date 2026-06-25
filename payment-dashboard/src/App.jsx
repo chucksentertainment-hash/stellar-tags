@@ -853,6 +853,9 @@ function Dashboard({
                   autoComplete="off"
                   disabled={!userPublicKey || isProcessing}
                 />
+                {nameTag === userPublicKey && (
+                  <span className="field-error">Warning: You are sending funds to your own address.</span>
+                )}
 
                 <label>Amount (XLM)</label>
                 <input
