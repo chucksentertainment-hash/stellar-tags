@@ -28,6 +28,11 @@ jobs:
       - name: Install Backend Dependencies
         run: npm ci
 
+      - name: Apply Database Migrations
+        env:
+          DATABASE_URL: file:./data/registrations.db
+        run: npx prisma migrate deploy --schema prisma/schema.prisma
+
       - name: Run Backend Tests
         run: npm test
 
