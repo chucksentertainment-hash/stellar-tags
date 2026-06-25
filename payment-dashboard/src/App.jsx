@@ -358,7 +358,7 @@ function Dashboard({
   const [activeBalancePanel, setActiveBalancePanel] = useState('')
   const [receiveAddress, setReceiveAddress] = useState('')
   const [receiveTag, setReceiveTag] = useState('')
-  const [, setReceiveStatus] = useState({
+  const [receiveStatus, setReceiveStatus] = useState({
     text: '',
     color: '#1F2937',
     bgColor: '#F3F4F6',
@@ -449,7 +449,7 @@ function Dashboard({
             return
           }
         }
-      } catch (error) {
+      } catch {
         // Silently fail on search errors during typing
       }
     }
@@ -594,6 +594,11 @@ function Dashboard({
     } catch {
       displayReceiveMessage('Copy failed. Please copy manually.', '#DC2626', '#FEE2E2')
     }
+  }
+
+  const handleMaxClick = () => {
+    const maxSpendable = Math.max(0, parseFloat(balance) - 1.00001)
+    setAmount(maxSpendable.toFixed(5).toString())
   }
 
   const handleDisconnect = () => {
@@ -746,19 +751,31 @@ function Dashboard({
                 />
 
                 <label>Amount (XLM)</label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={amount}
-                  onChange={(event) => {
-                    const raw = event.target.value.replace(/[^0-9.]/g, '')
-                    const parts = raw.split('.')
-                    const cleaned = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw
-                    setAmount(cleaned)
-                  }}
-                  placeholder="0.00"
-                  disabled={!userPublicKey || isProcessing}
-                />
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={amount}
+                    onChange={(event) => {
+                      const raw = event.target.value.replace(/[^0-9.]/g, '')
+                      const parts = raw.split('.')
+                      const cleaned = parts.length > 2 ? parts[0] + '.' + parts.slice(1).join('') : raw
+                      setAmount(cleaned)
+                    }}
+                    placeholder="0.00"
+                    disabled={!userPublicKey || isProcessing}
+                    style={{ flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={handleMaxClick}
+                    disabled={!userPublicKey || isProcessing || balance === null}
+                    style={{ whiteSpace: 'nowrap' }}
+                  >
+                    Max
+                  </button>
+                </div>
 
                 <div className="form-actions">
                   <button
