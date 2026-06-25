@@ -1,3 +1,4 @@
+/* global jest, describe, test, expect, beforeEach, afterEach, beforeAll */
 'use strict';
 
 jest.mock('dotenv', () => ({ config: jest.fn() }));
@@ -297,3 +298,95 @@ describe('GET /users — pagination and search', () => {
     expect(res.body).toHaveProperty('data');
   });
 });
+
+describe('POST /register — block secret keys', () => {
+  let request;
+  let app;
+  let mockConn;
+
+  beforeEach(() => {
+    jest.resetModules();
+
+    jest.mock('dotenv', () => ({ config: jest.fn() }));
+    jest.mock('fs', () => ({ ...jest.requireActual('fs'), mkdirSync: jest.fn() }));
+    jest.mock('@stellar/stellar-sdk', () => ({
+      Horizon: { Server: jest.fn() },
+      StrKey: { isValidEd25519PublicKey: jest.fn((addr) => addr && (addr.startsWith('G') || addr.startsWith('S') || addr.startsWith('s'))) }
+    }));
+    jest.mock('pdfkit', () => jest.fn());
+    jest.mock('./src/cleanup-cron', () => ({ scheduleCleanupJob: jest.fn() }));
+
+    jest.mock('sqlite3', () => ({
+      verbose: () => ({
+        Database: jest.fn().mockImplementation((_path, cb) => {
+          const db = { run: jest.fn((sql, cb2) => cb2 && cb2(null)), close: jest.fn((cb2) => cb2 && cb2()) };
+          if (cb) cb(null);
+          return db;
+        }),
+      }),
+    }));
+
+    mockConn = {
+      run: jest.fn((sql, params, cb) => {
+        const fn = typeof params === 'function' ? params : cb;
+        if (fn) fn.call({ lastID: 1, changes: 1 }, null);
+      }),
+      get: jest.fn((sql, params, cb) => {
+        const fn = typeof params === 'function' ? params : cb;
+        if (fn) fn(null, null);
+      }),
+    };
+
+    jest.mock('generic-pool', () => ({
+      createPool: jest.fn(() => ({
+        acquire: jest.fn().mockResolvedValue(mockConn),
+        release: jest.fn(),
+        drain: jest.fn().mockResolvedValue(undefined),
+        clear: jest.fn().mockResolvedValue(undefined),
+      })),
+    }));
+
+    ({ app } = require('./server'));
+    request = require('supertest');
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test('blocks registration if address starts with S (uppercase)', async () => {
+    const res = await request(app)
+      .post('/register')
+      .send({ username: 'alice', address: 'SBCDEFGHIJKLMNOPQRSTUVWXYZ' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      error: "Never share your Secret Key. Please register using your Public Key (starts with G)."
+    });
+  });
+
+  test('blocks registration if address starts with s (lowercase)', async () => {
+    const res = await request(app)
+      .post('/register')
+      .send({ username: 'alice', address: 'sBCDEFGHIJKLMNOPQRSTUVWXYZ' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      error: "Never share your Secret Key. Please register using your Public Key (starts with G)."
+    });
+  });
+
+  test('allows registration and continues flow if address starts with G', async () => {
+    const res = await request(app)
+      .post('/register')
+      .send({ username: 'alice', address: 'GBCDEFGHIJKLMNOPQRSTUVWXYZ' });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      ok: true,
+      username: 'alice*localhost',
+      address: 'GBCDEFGHIJKLMNOPQRSTUVWXYZ'
+    });
+  });
+});
+
