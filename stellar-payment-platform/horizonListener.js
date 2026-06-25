@@ -11,7 +11,7 @@
 // ---------------------------------------------------------------------------
 
 const { Horizon } = require('@stellar/stellar-sdk');
-const { poolAll } = require('./server');
+const { prisma } = require('./prismaClient');
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -102,10 +102,10 @@ const watchAccount = (accountId) => {
  */
 const syncWatchedAccounts = async () => {
   try {
-    const rows = await poolAll(
-      'SELECT DISTINCT address FROM username_registry',
-      [],
-    );
+    const rows = await prisma.user.findMany({
+      distinct: ['address'],
+      select: { address: true },
+    });
 
     const currentAddresses = new Set(rows.map((r) => r.address));
 
@@ -136,13 +136,14 @@ const syncWatchedAccounts = async () => {
 // ---------------------------------------------------------------------------
 // Graceful Shutdown
 // ---------------------------------------------------------------------------
-const shutdown = () => {
+const shutdown = async () => {
   console.log(`\n[${timestamp()}] Shutting down Horizon listener...`);
   for (const [address, closeFn] of activeStreams) {
     if (typeof closeFn === 'function') closeFn();
     console.log(`  Closed stream for ${address}`);
   }
   activeStreams.clear();
+  await prisma.$disconnect();
   process.exit(0);
 };
 

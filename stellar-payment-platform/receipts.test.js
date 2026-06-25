@@ -32,43 +32,23 @@ jest.mock('pdfkit', () => {
 
 jest.mock('dotenv', () => ({ config: jest.fn() }));
 
-jest.mock('fs', () => ({
-  ...jest.requireActual('fs'),
-  mkdirSync: jest.fn(),
-}));
-
-jest.mock('sqlite3', () => ({
-  verbose: () => ({
-    Database: jest.fn().mockImplementation((_path, cb) => {
-      const db = {
-        run: jest.fn(function (...args) {
-          const fn = args.find((a) => typeof a === 'function');
-          if (fn) fn.call({ lastID: 0, changes: 0 }, null);
-        }),
-        serialize: jest.fn((fn) => fn && fn()),
-        close: jest.fn((cb) => cb && cb()),
-      };
-      if (cb) cb(null);
-      return db;
-    }),
-  }),
-}));
-
-jest.mock('generic-pool', () => ({
-  createPool: jest.fn(() => ({
-    acquire: jest.fn().mockResolvedValue({
-      run: jest.fn(function (...args) {
-        const fn = args.find((a) => typeof a === 'function');
-        if (fn) fn.call({ lastID: 1, changes: 1 }, null);
-      }),
-    }),
-    release: jest.fn(),
-    drain: jest.fn().mockResolvedValue(undefined),
-    clear: jest.fn().mockResolvedValue(undefined),
-  })),
-}));
-
 jest.mock('./src/cleanup-cron', () => ({ scheduleCleanupJob: jest.fn() }));
+
+// The receipts endpoint never touches the database, but loading server.js does
+// instantiate the Prisma client — mock it so no real connection is created.
+jest.mock('./prismaClient', () => ({
+  prisma: {
+    user: {
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      count: jest.fn(),
+      create: jest.fn(),
+    },
+    $transaction: jest.fn((ops) => Promise.all(ops)),
+    $disconnect: jest.fn().mockResolvedValue(undefined),
+  },
+}));
 
 const { app } = require('./server');
 

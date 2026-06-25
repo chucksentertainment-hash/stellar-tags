@@ -1,0 +1,151 @@
+/* Latency Gauge Styles */
+
+.latency-gauge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.latency-gauge .gauge-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  flex-shrink: 0;
+}
+
+.latency-gauge .gauge-value {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.75px;
+}
+
+/* Status: Idle (no data yet) */
+.latency-gauge.idle {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
+.latency-gauge.idle .gauge-dot {
+  background-color: #d1d5db;
+}
+
+/* Status: Checking */
+.latency-gauge.checking {
+  background-color: #fef3c7;
+  color: #b45309;
+}
+
+.latency-gauge.checking .gauge-dot {
+  background-color: #fbbf24;
+  animation: pulse-glow-amber 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Status: Unhealthy (offline) */
+.latency-gauge.unhealthy {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.latency-gauge.unhealthy .gauge-dot {
+  background-color: #ef4444;
+  animation: pulse-glow-red 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Latency: Excellent (< 100ms) */
+.latency-gauge.excellent {
+  background-color: #d1fae5;
+  color: #047857;
+}
+
+.latency-gauge.excellent .gauge-dot {
+  background-color: #10b981;
+  animation: none;
+}
+
+/* Latency: Good (100-200ms) */
+.latency-gauge.good {
+  background-color: #dbeafe;
+  color: #0c4a6e;
+}
+
+.latency-gauge.good .gauge-dot {
+  background-color: #3b82f6;
+}
+
+/* Latency: Fair (200-500ms) */
+.latency-gauge.fair {
+  background-color: #fce7f3;
+  color: #831843;
+}
+
+.latency-gauge.fair .gauge-dot {
+  background-color: #ec4899;
+}
+
+/* Latency: Poor (> 500ms) */
+.latency-gauge.poor {
+  background-color: #fed7aa;
+  color: #92400e;
+}
+
+.latency-gauge.poor .gauge-dot {
+  background-color: #f97316;
+}
+
+/* Animations */
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 0 4px rgba(16, 185, 129, 0);
+  }
+}
+
+@keyframes pulse-glow-amber {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.4);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 0 4px rgba(251, 191, 36, 0);
+  }
+}
+
+@keyframes pulse-glow-red {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 0 4px rgba(239, 68, 68, 0);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+  .latency-gauge {
+    padding: 0.325rem 0.625rem;
+    font-size: 0.8125rem;
+    gap: 0.375rem;
+  }
+
+  .latency-gauge .gauge-dot {
+    width: 0.375rem;
+    height: 0.375rem;
+  }
+}
