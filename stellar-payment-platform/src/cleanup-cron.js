@@ -1,5 +1,4 @@
 const cron = require('node-cron');
-const { promisify } = require('util');
 
 /**
  * Number of days after which a registration is considered stale.
@@ -19,80 +18,59 @@ const ACTIVE_NETWORK_ADDRESSES = new Set([
 ]);
 
 /**
- * Runs the stale-account cleanup logic against the provided sqlite3 database
- * instance.  The function is exported separately so it can be unit-tested
- * without needing a live cron scheduler.
+ * Runs the stale-account cleanup logic against the provided Prisma client.
+ * The function is exported separately so it can be unit-tested without needing
+ * a live cron scheduler.
  *
  * Behaviour:
  *   - Registrations older than STALE_THRESHOLD_DAYS whose address is NOT in
  *     ACTIVE_NETWORK_ADDRESSES are permanently deleted.
  *   - Registrations older than STALE_THRESHOLD_DAYS whose address IS in
- *     ACTIVE_NETWORK_ADDRESSES are flagged by setting flagged_at to the
- *     current timestamp (the column is added lazily if it does not yet exist).
+ *     ACTIVE_NETWORK_ADDRESSES are flagged by setting flaggedAt to the
+ *     current timestamp (only if not already flagged).
  *
- * @param {import('sqlite3').Database} db - An open sqlite3 database instance.
+ * @param {import('@prisma/client').PrismaClient} prisma - A Prisma client.
  * @returns {Promise<{pruned: number, flagged: number}>}
  */
-function runCleanup(db) {
-  const runAsync = typeof db.runAsync === 'function'
-    ? db.runAsync.bind(db)
-    : promisify(db.run.bind(db));
+async function runCleanup(prisma) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - STALE_THRESHOLD_DAYS);
 
-  const getAsync = typeof db.getAsync === 'function'
-    ? db.getAsync.bind(db)
-    : promisify(db.get.bind(db));
+  const activeAddresses = [...ACTIVE_NETWORK_ADDRESSES];
 
-  return (async () => {
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - STALE_THRESHOLD_DAYS);
-    const cutoffIso = cutoff.toISOString();
+  // 1. Delete stale rows that are NOT active network addresses.
+  const pruneResult = await prisma.user.deleteMany({
+    where: {
+      createdAt: { lt: cutoff },
+      address: { notIn: activeAddresses },
+    },
+  });
 
-    // Ensure the flagged_at column exists (idempotent migration).
-    try {
-      await runAsync(
-        `ALTER TABLE username_registry ADD COLUMN flagged_at TEXT`,
-      );
-    } catch (_err) {
-      // Ignore errors – the column likely already exists.
-    }
+  // 2. Flag stale rows that ARE active network addresses.
+  const flagResult = await prisma.user.updateMany({
+    where: {
+      createdAt: { lt: cutoff },
+      address: { in: activeAddresses },
+      flaggedAt: null,
+    },
+    data: { flaggedAt: new Date() },
+  });
 
-    // 1. Delete stale rows that are NOT active network addresses.
-    await runAsync(
-      `DELETE FROM username_registry
-       WHERE created_at < ?
-         AND address NOT IN (${[...ACTIVE_NETWORK_ADDRESSES].map(() => '?').join(',')})`,
-      [cutoffIso, ...ACTIVE_NETWORK_ADDRESSES],
-    );
-    const pruneResult = await getAsync('SELECT changes() AS changes');
-    const pruned = pruneResult?.changes || 0;
-
-    // 2. Flag stale rows that ARE active network addresses.
-    await runAsync(
-      `UPDATE username_registry
-       SET flagged_at = ?
-       WHERE created_at < ?
-         AND address IN (${[...ACTIVE_NETWORK_ADDRESSES].map(() => '?').join(',')})
-         AND flagged_at IS NULL`,
-      [new Date().toISOString(), cutoffIso, ...ACTIVE_NETWORK_ADDRESSES],
-    );
-    const flagResult = await getAsync('SELECT changes() AS changes');
-
-    return { pruned, flagged: flagResult?.changes || 0 };
-  })();
+  return { pruned: pruneResult.count, flagged: flagResult.count };
 }
 
 /**
  * Registers a weekly cron job (every Sunday at midnight) that calls
  * `runCleanup` and logs the results.
  *
- * @param {import('sqlite3').Database} db - An open sqlite3 database instance.
+ * @param {import('@prisma/client').PrismaClient} prisma - A Prisma client.
  */
-function scheduleCleanupJob(db) {
+function scheduleCleanupJob(prisma) {
   // Cron expression: "0 0 * * 0" → runs at 00:00 every Sunday.
   cron.schedule('0 0 * * 0', async () => {
     console.log('[cleanup-cron] Starting stale-account sweep…');
     try {
-      const { pruned, flagged } = await runCleanup(db);
+      const { pruned, flagged } = await runCleanup(prisma);
       console.log(
         `[cleanup-cron] Sweep complete – pruned: ${pruned}, flagged: ${flagged}`,
       );

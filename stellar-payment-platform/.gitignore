@@ -1,0 +1,9 @@
+node_modules/
+
+# Local environment — never commit real credentials
+.env
+.env.*
+!.env.example
+
+# Legacy SQLite database (replaced by PostgreSQL/Prisma)
+data/*.db

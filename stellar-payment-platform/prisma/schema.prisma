@@ -1,5 +1,11 @@
+// Prisma schema for the Stellar Payment Platform.
+// Migrated from a raw SQLite database to PostgreSQL for higher concurrency.
+//
+// The DATABASE_URL is read from the environment (see .env.example):
+//   DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE?schema=public"
+
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -7,10 +13,15 @@ generator client {
   provider = "prisma-client-js"
 }
 
-model username_registry {
-  username   String @id
-  address    String @unique
-  created_at String
+// Federation registry mapping a human-readable username (e.g. "lekan*localhost")
+// to its Stellar address. Maps to the legacy "username_registry" table so the
+// data shape is preserved across the SQLite -> PostgreSQL migration.
+model User {
+  username  String    @id
+  address   String    @unique
+  createdAt DateTime  @default(now()) @map("created_at")
+  flaggedAt DateTime? @map("flagged_at")
 
+  @@map("username_registry")
   @@index([username])
 }

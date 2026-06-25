@@ -8,22 +8,27 @@
     "dev": "node server.js",
     "test": "jest --forceExit",
     "listener": "node horizonListener.js",
-    "db:seed": "node scripts/seed.js"
+    "db:seed": "node scripts/seed.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@faker-js/faker": "^10.5.0",
+    "@prisma/client": "^6.1.0",
     "@stellar/stellar-sdk": "^16.0.1",
     "connect-timeout": "^1.9.1",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^4.21.2",
-    "generic-pool": "^3.9.0",
     "node-cron": "4.5.0",
-    "pdfkit": "^0.15.2",
-    "sqlite3": "^5.1.7"
+    "pdfkit": "^0.15.2"
   },
   "devDependencies": {
     "jest": "^29.7.0",
+    "prisma": "^6.1.0",
     "supertest": "^7.0.0"
   }
 }

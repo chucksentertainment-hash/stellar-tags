@@ -28,8 +28,8 @@ The following diagram maps exactly how data flows between the user, Vercel, Rail
        |
        | HTTP API Calls (via VITE_API_BASE)
        v
-[ stellar-payment-platform ] <---> [ SQLite Database ] 
-  (server.js: Server router on Railway)      (data/registrations.db: User/payment layout)
+[ stellar-payment-platform ] <---> [ PostgreSQL Database ]
+  (server.js: Server router on Railway)      (via Prisma ORM: User/payment layout)
        |
        | Stellar Network / RPC
        v
@@ -40,7 +40,7 @@ The following diagram maps exactly how data flows between the user, Vercel, Rail
 **Data Flow:**
 1. **User** accesses the `payment-dashboard` and connects their Stellar wallet.
 2. The dashboard queries the `stellar-payment-platform` server for user registrations and payment routing information.
-3. The server interacts with its local SQLite database to resolve usernames to addresses using the endpoints documented below.
+3. The server interacts with its PostgreSQL database (via the Prisma ORM) to resolve usernames to addresses using the endpoints documented below.
 4. When a payment is initiated, it's routed through the `payment_router` Soroban contract on the Stellar network.
 
 ## Repository structure
@@ -56,8 +56,8 @@ The following diagram maps exactly how data flows between the user, Vercel, Rail
 │       └── lib.rs           # Soroban smart contract logic
 └── stellar-payment-platform/
     ├── server.js            # Server router (Express API endpoints)
-    └── data/
-        └── registrations.db # SQLite database for user/payment lookups
+    └── prisma/
+        └── schema.prisma    # Prisma schema for the PostgreSQL database
 ```
 
 ## Getting started
@@ -74,11 +74,58 @@ npm run dev
 
 ### Server
 
+The server uses **PostgreSQL** as its database, accessed through the
+[Prisma ORM](https://www.prisma.io/). You need a running Postgres instance
+(local install, Docker, or a hosted provider) before starting the server.
+
 ```bash
 cd stellar-payment-platform
 npm install
+
+# 1. Create your local env file and point DATABASE_URL at your Postgres DB
+cp .env.example .env
+#    then edit .env (see "Database setup" below)
+
+# 2. Apply the schema to your database
+npm run prisma:migrate
+
+# 3. Start the server
 npm run dev
 ```
+
+#### Database setup
+
+The connection string lives in `stellar-payment-platform/.env` as `DATABASE_URL`.
+Copy `.env.example` to `.env` and set it to your own Postgres database:
+
+```env
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE?schema=public"
+```
+
+For a typical local install that becomes, for example:
+
+```env
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/stellar_tags?schema=public"
+```
+
+The quickest way to get a local database is Docker:
+
+```bash
+docker run --name stellar-postgres -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=stellar_tags -p 5432:5432 -d postgres:16
+```
+
+Useful Prisma commands (run from `stellar-payment-platform/`):
+
+| Command | Description |
+| --- | --- |
+| `npm run prisma:migrate` | Create/apply migrations against your dev database |
+| `npm run prisma:deploy` | Apply existing migrations (CI / production) |
+| `npm run prisma:generate` | Regenerate the Prisma Client after schema changes |
+| `npm run prisma:studio` | Open Prisma Studio to browse the data |
+
+> `.env` is gitignored — never commit real credentials. Each contributor keeps
+> their own local `DATABASE_URL`.
 
 ### Smart contract (Soroban)
 
@@ -111,8 +158,10 @@ To ensure a seamless local developer installation requiring zero guesswork, plea
 - `VITE_API_BASE` - The base URL where the frontend expects the Node.js server API to be running (e.g., `http://localhost:5000`).
 
 ### Server (`stellar-payment-platform/.env` or exported directly)
+- `DATABASE_URL` - **(Required)** PostgreSQL connection string used by Prisma (see [Database setup](#database-setup)).
 - `PORT` - (Optional) The port for the Node.js server to listen on. Defaults to `5000`.
-- `DB_PATH` - (Optional) The file path to the SQLite database. Defaults to `data/registrations.db` relative to the server directory.
+- `HORIZON_NETWORK` - (Optional) Stellar network for the payment listener: `testnet` (default) or `public`.
+- `STELLAR_TAG_DOMAIN` - (Optional) Extra origin to add to the CORS allow-list.
 
 ## Detailed Endpoint Documentation
 
