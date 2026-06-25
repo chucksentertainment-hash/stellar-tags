@@ -1,4 +1,3 @@
-/* global jest, describe, test, expect, beforeEach, afterEach, beforeAll */
 'use strict';
 
 jest.mock('dotenv', () => ({ config: jest.fn() }));
@@ -302,7 +301,6 @@ describe('GET /users — pagination and search', () => {
 describe('POST /register — block secret keys', () => {
   let request;
   let app;
-  let mockConn;
 
   beforeEach(() => {
     jest.resetModules();
@@ -315,36 +313,6 @@ describe('POST /register — block secret keys', () => {
     }));
     jest.mock('pdfkit', () => jest.fn());
     jest.mock('./src/cleanup-cron', () => ({ scheduleCleanupJob: jest.fn() }));
-
-    jest.mock('sqlite3', () => ({
-      verbose: () => ({
-        Database: jest.fn().mockImplementation((_path, cb) => {
-          const db = { run: jest.fn((sql, cb2) => cb2 && cb2(null)), close: jest.fn((cb2) => cb2 && cb2()) };
-          if (cb) cb(null);
-          return db;
-        }),
-      }),
-    }));
-
-    mockConn = {
-      run: jest.fn((sql, params, cb) => {
-        const fn = typeof params === 'function' ? params : cb;
-        if (fn) fn.call({ lastID: 1, changes: 1 }, null);
-      }),
-      get: jest.fn((sql, params, cb) => {
-        const fn = typeof params === 'function' ? params : cb;
-        if (fn) fn(null, null);
-      }),
-    };
-
-    jest.mock('generic-pool', () => ({
-      createPool: jest.fn(() => ({
-        acquire: jest.fn().mockResolvedValue(mockConn),
-        release: jest.fn(),
-        drain: jest.fn().mockResolvedValue(undefined),
-        clear: jest.fn().mockResolvedValue(undefined),
-      })),
-    }));
 
     ({ app } = require('./server'));
     request = require('supertest');
@@ -385,6 +353,52 @@ describe('POST /register — block secret keys', () => {
     expect(res.body).toMatchObject({
       ok: true,
       username: 'alice*localhost',
+      address: 'GBCDEFGHIJKLMNOPQRSTUVWXYZ'
+    });
+  });
+
+  test('rejects 1-character local username payload', async () => {
+    const res = await request(app)
+      .post('/register')
+      .send({ username: 'a', address: 'GBCDEFGHIJKLMNOPQRSTUVWXYZ' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      error: "Username must be at least 3 characters long."
+    });
+  });
+
+  test('rejects 2-character local username payload', async () => {
+    const res = await request(app)
+      .post('/register')
+      .send({ username: 'ab', address: 'GBCDEFGHIJKLMNOPQRSTUVWXYZ' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      error: "Username must be at least 3 characters long."
+    });
+  });
+
+  test('rejects 2-character local username payload with domain suffix', async () => {
+    const res = await request(app)
+      .post('/register')
+      .send({ username: 'ab*domain.com', address: 'GBCDEFGHIJKLMNOPQRSTUVWXYZ' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({
+      error: "Username must be at least 3 characters long."
+    });
+  });
+
+  test('allows 3-character username payload', async () => {
+    const res = await request(app)
+      .post('/register')
+      .send({ username: 'abc', address: 'GBCDEFGHIJKLMNOPQRSTUVWXYZ' });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      ok: true,
+      username: 'abc*localhost',
       address: 'GBCDEFGHIJKLMNOPQRSTUVWXYZ'
     });
   });

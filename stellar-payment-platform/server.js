@@ -215,6 +215,11 @@ app.post('/register', async (req, res, next) => {
     return res.status(400).json({ error: 'Missing required fields: username and address are both required.' });
   }
 
+  const usernameLocalPart = username.includes('*') ? username.split('*')[0] : username;
+  if (usernameLocalPart.length < 3) {
+    return res.status(400).json({ error: "Username must be at least 3 characters long." });
+  }
+
   if (!StrKey.isValidEd25519PublicKey(address)) {
     const error = new Error('Invalid Stellar Public Key format.');
     error.statusCode = 400;
