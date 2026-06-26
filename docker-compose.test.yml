@@ -1,0 +1,21 @@
+services:
+  api-test:
+    build:
+      context: ./stellar-payment-platform
+    environment:
+      PORT: "5001"
+      DB_PATH: /tmp/test-registrations.db
+    ports:
+      - "5001:5001"
+    networks:
+      - stellar-test-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:5001/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+networks:
+  stellar-test-net:
+    driver: bridge

@@ -7,6 +7,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "jest --forceExit",
+    "test:integration": "TEST_API_URL=http://localhost:5001 jest --forceExit --testPathPattern=integration",
     "listener": "node horizonListener.js",
     "db:seed": "node scripts/seed.js",
     "prisma:generate": "prisma generate",
