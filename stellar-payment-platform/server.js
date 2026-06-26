@@ -254,15 +254,8 @@ app.post('/register', async (req, res, next) => {
       federation_address: `${normalizedUsername}*${process.env.DOMAIN || 'localhost'}`,
     });
   } catch (error) {
-    // P2002 — unique constraint violation (username or address already taken)
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      const target = error.meta?.target;
-      const isAddress = Array.isArray(target)
-        ? target.includes('address')
-        : typeof target === 'string' && target.includes('address');
-      const conflictError = new Error(isAddress ? 'Address already registered' : 'Username already registered');
-      conflictError.statusCode = 409;
-      return next(conflictError);
+    if (error.code === 'SQLITE_CONSTRAINT' || (error.message && error.message.includes('UNIQUE'))) {
+      return res.status(409).json({ error: 'Username is already taken. Please choose another.' });
     }
     const registrationError = new Error('Failed to save registration');
     registrationError.statusCode = 500;
