@@ -322,10 +322,8 @@ app.post('/register', async (req, res, next) => {
 
     return res.json({ ok: true, username, address });
   } catch (error) {
-    if (error.message && error.message.includes('UNIQUE')) {
-      const conflictError = new Error('Username already registered');
-      conflictError.statusCode = 409;
-      return next(conflictError);
+    if (error.code === 'SQLITE_CONSTRAINT' || (error.message && error.message.includes('UNIQUE'))) {
+      return res.status(409).json({ error: 'Username is already taken. Please choose another.' });
     }
     const registrationError = new Error('Failed to save registration');
     registrationError.statusCode = 500;
