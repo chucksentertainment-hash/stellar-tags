@@ -40,17 +40,19 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
-const redisClient = createClient({
+const redisClient = process.env.REDIS_URL ? createClient({
   url: process.env.REDIS_URL
-});
-redisClient.connect().catch(console.error);
+}) : null;
+if (redisClient) {
+  redisClient.connect().catch(console.error);
+}
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // Limit each IP to 100 requests per windowMs
-  store: new RedisStore({
+  store: redisClient ? new RedisStore({
     sendCommand: (...args) => redisClient.sendCommand(args),
-  }),
+  }) : undefined,
   standardHeaders: true,
   legacyHeaders: false,
 });
