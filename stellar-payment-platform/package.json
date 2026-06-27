@@ -29,7 +29,8 @@
     "pdfkit": "^0.15.2",
     "rate-limit-redis": "^4.2.0",
     "redis": "^4.7.0",
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^5.1.7",
+    "xss": "^1.0.15"
   },
   "devDependencies": {
     "jest": "^29.7.0",
