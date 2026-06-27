@@ -25,6 +25,7 @@ const [activeView, setActiveView] = useState('dashboard')
   })
   const [registrationState, setRegistrationState] = useState("unknown");
   const [isOffline, setIsOffline] = useState(!navigator.onLine);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);

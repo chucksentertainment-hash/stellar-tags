@@ -82,6 +82,8 @@ function RegistrationPage({
   };
 
   const handleSubmit = async (event) => {
+    if (isSubmitting) return;
+    
     event.preventDefault();
     const cleaned = username.trim();
     const normalizedUsername = normalizeNameTag(cleaned);
@@ -120,40 +122,45 @@ function RegistrationPage({
       signature = result.signedMessage;
     } catch (err) {
       setStatusMessage(err.message || "Signature request cancelled.", "error");
-      setIsSubmitting(false);
       return;
     }
 
     setStatusMessage("Submitting your registration...", "neutral");
 
-    fetch(`${API_BASE}/register`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        username: normalizedUsername,
-        address: userPublicKey,
-        signature,
-      }),
-    })
-      .then(async (response) => {
-        const data = await response.json().catch(() => null);
-        if (!response.ok) {
-          throw new Error((data && data.detail) || "Registration failed.");
-        }
+    try {
+      fetch(`${API_BASE}/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: normalizedUsername,
+          address: userPublicKey,
+          signature,
+        }),
+      })
+        .then(async (response) => {
+          const data = await response.json().catch(() => null);
+          if (!response.ok) {
+            throw new Error((data && data.detail) || "Registration failed.");
+          }
 
-        return data;
-      })
-      .then(() => {
-        setStatusMessage("Username reserved and saved.", "success");
-      })
-      .catch((error) => {
-        setStatusMessage(error.message || "Registration failed.", "error");
-      })
-      .finally(() => {
-        setIsSubmitting(false);
-      });
+          return data;
+        })
+        .then(() => {
+          setStatusMessage("Username reserved and saved.", "success");
+        })
+        .catch((error) => {
+          setStatusMessage(error.message || "Registration failed.", "error");
+        })
+        .finally(() => {
+          setIsSubmitting(false);
+        });
+    } catch (error) {
+      setStatusMessage(error.message || "Registration failed.", "error");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -249,7 +256,7 @@ function RegistrationPage({
             type="submit"
             disabled={isSubmitting || !!usernameError}
           >
-            {isSubmitting ? <LoadingSpinner /> : "Reserve username"}
+            {isSubmitting ? "Processing..." : "Reserve username"}
           </button>
         </form>
         <div className={`status-card ${status.tone}`}>

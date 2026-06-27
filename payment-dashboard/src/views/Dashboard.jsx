@@ -192,6 +192,9 @@ function Dashboard({
   };
 
   const handleLookup = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    
     const recipientInput = nameTag.trim();
     const amountValue = parseFloat(amount);
 
@@ -338,6 +341,7 @@ function Dashboard({
       );
     } finally {
       setIsProcessing(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -560,19 +564,19 @@ function Dashboard({
                 />
 
                 <div className="form-actions">
-                  <button
-                    type="button"
-                    className="accent-btn disabled:opacity-50 disabled:cursor-not-allowed"
-                    onClick={handleLookup}
-                    disabled={
-                      !userPublicKey ||
-                      isProcessing ||
-                      !amount ||
-                      Number(amount) <= 0
-                    }
-                  >
-                    {isProcessing ? <LoadingSpinner /> : "Transfer"}
-                  </button>
+                <button
+                  type="button"
+                  className="accent-btn disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={handleLookup}
+                  disabled={
+                    !userPublicKey ||
+                    isSubmitting ||
+                    !amount ||
+                    Number(amount) <= 0
+                  }
+                >
+                  {isSubmitting ? "Processing..." : "Transfer"}
+                </button>
                   <button
                     type="button"
                     className="ghost-button"
