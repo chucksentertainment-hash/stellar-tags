@@ -19,6 +19,8 @@ generator client {
 model User {
   username  String    @id
   address   String    @unique
+  memoType  String?   @map("memo_type")
+  memo      String?
   createdAt DateTime  @default(now()) @map("created_at")
   flaggedAt DateTime? @map("flagged_at")
 

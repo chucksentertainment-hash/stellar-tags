@@ -7,6 +7,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "jest --forceExit",
+    "test:integration": "TEST_API_URL=http://localhost:5001 jest --forceExit --testPathPattern=integration",
     "listener": "node horizonListener.js",
     "db:seed": "node scripts/seed.js",
     "prisma:generate": "prisma generate",
@@ -19,11 +20,18 @@
     "@faker-js/faker": "^10.5.0",
     "@prisma/client": "^6.1.0",
     "@stellar/stellar-sdk": "^16.0.1",
+    "connect-timeout": "^1.9.1",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "generic-pool": "^3.9.0",
     "node-cron": "4.5.0",
-    "pdfkit": "^0.15.2"
+    "pdfkit": "^0.15.2",
+    "rate-limit-redis": "^4.2.0",
+    "redis": "^4.7.0",
+    "sqlite3": "^5.1.7",
+    "xss": "^1.0.15"
   },
   "devDependencies": {
     "jest": "^29.7.0",

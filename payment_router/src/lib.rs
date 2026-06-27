@@ -12,6 +12,30 @@ impl PaymentRouter {
     const FEE_CAP_XLM: i128 = 30;
     const FEE_CAP: i128 = Self::FEE_CAP_XLM * Self::XLM_DECIMALS;
 
+    /// Routes a payment from a sender to a recipient, deducting a platform fee.
+    ///
+    /// The fee is calculated as a percentage (`FEE_BPS` / 10,000) of the `amount`,
+    /// capped at `FEE_CAP`. The platform fee is transferred to `platform_treasury`,
+    /// and the remaining balance is transferred to `recipient`.
+    ///
+    /// # Parameters
+    /// * `env` - The Soroban environment interface.
+    /// * `sender` - The address initiating the payment. Must authorize the transaction.
+    /// * `recipient` - The destination address for the payment (e.g., the Anchor's wallet for fiat withdrawals).
+    /// * `platform_treasury` - The address where the platform fee will be deposited.
+    /// * `token_address` - The contract ID of the token asset being transferred (e.g., NGNC or USDC).
+    /// * `amount` - The total amount of tokens to be routed (inclusive of the fee).
+    ///
+    /// # Return Value
+    /// This function does not return a value.
+    ///
+    /// # Errors
+    /// * Fails if `sender.require_auth()` fails (i.e., the sender has not authorized the transaction).
+    /// * Fails if the `token_client.transfer` calls fail (e.g., insufficient balance, or invalid token).
+    ///
+    /// # Events
+    /// This function does not emit custom contract events natively via `env.events().publish(...)`, but it
+    /// internally logs success messages. The underlying token transfers will emit their respective standard transfer events.
     pub fn route_payment(
         env: Env,
         sender: Address,

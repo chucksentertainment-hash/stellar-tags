@@ -1,0 +1,26 @@
+config:
+  target: "http://localhost:5000"
+  phases:
+    - duration: 60
+      arrivalRate: 100
+      rampTo: 100
+      name: "Scale to 100 concurrent virtual users"
+  defaults:
+    headers:
+      accept: "application/json"
+scenarios:
+  - name: "Address lookup load"
+    weight: 3
+    flow:
+      - get:
+          url: "/lookup"
+          qs:
+            address: "GAPUQZH3WZUXHEMUGZN5ZYU4D4GHCFEMOGUINU6MF345GBD2QXNYYIEQ"
+  - name: "Federation lookup load"
+    weight: 1
+    flow:
+      - get:
+          url: "/federation"
+          qs:
+            q: "alice*localhost"
+            type: "name"
