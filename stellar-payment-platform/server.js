@@ -520,7 +520,7 @@ app.use((err, _req, _res, next) => {
 });
 
 // Global error handling middleware
-app.use((err, _req, res, _next) => {
+app.use((err, _req, res) => {
   const statusCode = err.statusCode || 500;
   const errorMessage = err.message || 'Internal server error';
 
@@ -570,7 +570,7 @@ const gracefulShutdown = (server, pool, signal) => {
     process.exit(0);
   });
 };
-app.use((err, req, res, next) => {
+app.use((err, req, res) => {
   // 1. Print the full error stack trace to the console (Viewable in Vercel Logs)
   console.error('\n❌ CRITICAL BACKEND ERROR:');
   console.error(err.stack);
