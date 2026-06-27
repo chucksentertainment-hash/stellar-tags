@@ -10,6 +10,9 @@ const { poolGet, poolAll, dbPool } = require('./src/db');
 const v1Router = require('./src/routes/v1');
 
 require('dotenv').config();
+const rateLimit = require('express-rate-limit');
+const RedisStore = require('rate-limit-redis');
+const { createClient } = require('redis');
 
 const { Horizon, StrKey } = require('@stellar/stellar-sdk');
 const PDFDocument = require('pdfkit');
@@ -46,7 +49,25 @@ const corsOptions = {
   optionsSuccessStatus: 204,
 };
 
+const redisClient = process.env.REDIS_URL ? createClient({
+  url: process.env.REDIS_URL
+}) : null;
+if (redisClient) {
+  redisClient.connect().catch(console.error);
+}
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  store: redisClient ? new RedisStore({
+    sendCommand: (...args) => redisClient.sendCommand(args),
+  }) : undefined,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.use(cors(corsOptions));
+app.use(limiter);
 // #49 — Enforce strict 10kb JSON payload size limit to prevent DoS via oversized payloads
 app.use(express.json({ limit: '10kb' }));
 app.use((err, _req, res, next) => {
@@ -516,11 +537,15 @@ app.use((err, _req, _res, next) => {
 });
 
 // Global error handling middleware
+#54-Refactor-API-Route-Architecture-to-Support-Explicit-Versioning-(/api/v1)-FIX
  #54-Refactor-API-Route-Architecture-to-Support-Explicit-Versioning-(/api/v1)-FIX
 app.use((err, req, res, _next) => {
   void _next;
 
 app.use((err, _req, res, _next) => {
+ main
+
+app.use((err, _req, res) => {
  main
   const statusCode = err.statusCode || 500;
   const errorMessage = err.message || 'Internal server error';
@@ -571,7 +596,7 @@ const gracefulShutdown = (server, pool, signal) => {
     process.exit(0);
   });
 };
-app.use((err, req, res, next) => {
+app.use((err, req, res) => {
   // 1. Print the full error stack trace to the console (Viewable in Vercel Logs)
   console.error('\n❌ CRITICAL BACKEND ERROR:');
   console.error(err.stack);

@@ -2,6 +2,7 @@ services:
   api-test:
     build:
       context: ./stellar-payment-platform
+      dockerfile: Dockerfile.test 
     environment:
       PORT: "5001"
       DB_PATH: /tmp/test-registrations.db
