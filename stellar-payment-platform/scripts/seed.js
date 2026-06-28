@@ -1,33 +1,11 @@
 const { faker } = require('@faker-js/faker');
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
-const fs = require('fs');
-const { promisify } = require('util');
 const { StrKey } = require('@stellar/stellar-sdk');
+require('dotenv').config();
 
-const dbPath = process.env.DB_PATH || path.join(__dirname, '..', 'data', 'registrations.db');
+const { prisma } = require('../prismaClient');
+
 const DEFAULT_FEDERATION_DOMAIN = 'localhost';
 const SEED_COUNT = 50;
-
-// Ensure data directory exists
-fs.mkdirSync(path.dirname(dbPath), { recursive: true });
-
-const db = new sqlite3.Database(dbPath);
-
-const attachAsyncDbMethods = (db) => {
-  if (typeof db.get === 'function') {
-    db.getAsync = promisify(db.get.bind(db));
-  }
-  if (typeof db.run === 'function') {
-    db.runAsync = promisify(db.run.bind(db));
-  }
-  if (typeof db.all === 'function') {
-    db.allAsync = promisify(db.all.bind(db));
-  }
-  return db;
-};
-
-attachAsyncDbMethods(db);
 
 // Generate a valid Stellar public key
 const generateStellarPublicKey = () => {
@@ -59,35 +37,25 @@ const normalizeNameTag = (value) => {
 const seedDatabase = async () => {
   try {
     console.log('Starting database seeding...');
-    
-    // Create table if not exists
-    await db.runAsync(
-      `CREATE TABLE IF NOT EXISTS username_registry (
-        username TEXT PRIMARY KEY,
-        address TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      )`
-    );
-    
     console.log(`Generating ${SEED_COUNT} mock entries...`);
-    
+
     let inserted = 0;
     let skipped = 0;
-    
+
     for (let i = 0; i < SEED_COUNT; i++) {
-      const username = normalizeNameTag(generateUsername());
+      const username = normalizeNameTag(generateUsername()).toLowerCase();
       const address = generateStellarPublicKey();
-      const createdAt = faker.date.past({ years: 1 }).toISOString();
-      
+      const createdAt = faker.date.past({ years: 1 });
+
       try {
-        await db.runAsync(
-          'INSERT INTO username_registry (username, address, created_at) VALUES (?, ?, ?)',
-          [username, address, createdAt]
-        );
+        await prisma.user.create({
+          data: { username, address, createdAt },
+        });
         inserted++;
         console.log(`✓ Inserted: ${username} -> ${address}`);
       } catch (error) {
-        if (error.message && error.message.includes('UNIQUE')) {
+        // P2002 — unique constraint violation (duplicate username or address)
+        if (error.code === 'P2002') {
           skipped++;
           console.log(`⊘ Skipped (duplicate): ${username}`);
         } else {
@@ -95,21 +63,19 @@ const seedDatabase = async () => {
         }
       }
     }
-    
+
     console.log('\n=== Seeding Complete ===');
     console.log(`Total entries generated: ${SEED_COUNT}`);
     console.log(`Successfully inserted: ${inserted}`);
     console.log(`Skipped (duplicates): ${skipped}`);
-    
-    // Show total count in database
-    const countResult = await db.getAsync('SELECT COUNT(*) as count FROM username_registry');
-    console.log(`Total entries in database: ${countResult.count}`);
-    
+
+    const count = await prisma.user.count();
+    console.log(`Total entries in database: ${count}`);
   } catch (error) {
     console.error('Fatal error during seeding:', error);
-    process.exit(1);
+    process.exitCode = 1;
   } finally {
-    db.close();
+    await prisma.$disconnect();
   }
 };
 
