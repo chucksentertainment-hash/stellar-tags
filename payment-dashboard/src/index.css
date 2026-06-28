@@ -549,6 +549,36 @@ body::before {
   margin-left: 6px;
 }
 
+.privacy-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  margin-left: 8px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.2s ease;
+}
+
+.privacy-toggle:hover {
+  color: var(--ink);
+}
+
+.privacy-toggle svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
