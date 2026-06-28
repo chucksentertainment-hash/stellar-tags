@@ -8,6 +8,7 @@ const xss = require('xss');
 const { Horizon, StrKey } = require('@stellar/stellar-sdk');
 const PDFDocument = require('pdfkit');
 const { prisma } = require('./prismaClient');
+const { verifyMultiSignerThreshold } = require('./src/multisigner-verifier');
 const { scheduleCleanupJob } = require('./src/cleanup-cron');
 const timeout = require('connect-timeout');
 
@@ -230,6 +231,18 @@ const validateMemo = (memoType, memo) => {
   return null;
 };
 
+/**
+ * Registration endpoint with multi-signer threshold verification
+ * 
+ * For single-signer accounts:
+ * - Signature must be the account's public key or a registered signer
+ * - Basic validation of address format
+ * 
+ * For multi-signer accounts (enterprise):
+ * - Fetches account signers and thresholds from Horizon
+ * - Validates that provided signature(s) meet minimum threshold
+ * - Ensures authorization requirements are satisfied
+ */
 app.post('/register', async (req, res, next) => {
   if (!req.is('application/json')) {
     return res.status(415).json({ error: "Unsupported Media Type. Please send application/json" });
@@ -239,6 +252,7 @@ app.post('/register', async (req, res, next) => {
   const address = typeof req.body.address === 'string' ? req.body.address.trim() : '';
   const memoType = typeof req.body.memo_type === 'string' ? req.body.memo_type.trim() : undefined;
   const memo = typeof req.body.memo === 'string' ? req.body.memo.trim() : undefined;
+  const signature = typeof req.body.signature === 'string' ? req.body.signature.trim() : '';
 
   if (address.toUpperCase().startsWith('S')) {
     return res.status(400).json({ error: "Never share your Secret Key. Please register using your Public Key (starts with G)." });
@@ -264,6 +278,14 @@ app.post('/register', async (req, res, next) => {
     return res.status(400).json({ error: memoError });
   }
 
+  // Signature is optional for legacy single-signer registrations.
+  // If provided, validate its format and run multi-signer verification.
+  if (signature && !StrKey.isValidEd25519PublicKey(signature)) {
+    const error = new Error('Invalid Stellar Public Key format.');
+    error.statusCode = 400;
+    return next(error);
+  }
+
   const normalizedUsername = username.toLowerCase();
 
   const RESERVED_NAMES = ['admin', 'root', 'support', 'system', 'stellar', 'api', 'help'];
@@ -282,6 +304,21 @@ app.post('/register', async (req, res, next) => {
       return next(conflictError);
     }
 
+    let verificationResult = null;
+    if (signature) {
+      verificationResult = await verifyMultiSignerThreshold(address, [signature], {
+        operationType: 'management',
+      });
+
+      if (!verificationResult.success) {
+        const verificationError = new Error(
+          verificationResult.errorMessage || 'Signature verification failed'
+        );
+        verificationError.statusCode = 401;
+        throw verificationError;
+      }
+    }
+
     await prisma.user.create({
       data: {
         username: normalizedUsername,
@@ -295,13 +332,37 @@ app.post('/register', async (req, res, next) => {
       username: normalizedUsername,
       address,
       federation_address: `${normalizedUsername}*${process.env.DOMAIN || 'localhost'}`,
+      ...(verificationResult && {
+        verification: {
+          accountId: verificationResult.accountId,
+          signerCount: verificationResult.signerCount,
+          thresholdMet: verificationResult.success,
+          requiredThreshold: verificationResult.requiredThreshold,
+          providedWeight: verificationResult.totalWeight,
+        },
+      }),
       ...(memoType && { memo_type: memoType, memo }),
     });
   } catch (error) {
     if (error.code === 'SQLITE_CONSTRAINT' || (error.message && error.message.includes('UNIQUE'))) {
       return res.status(409).json({ error: 'Username is already taken. Please choose another.' });
     }
-    const registrationError = new Error('Failed to save registration');
+    
+    // Handle verification errors
+    if (error.message && error.message.includes('Account not found')) {
+      const notFoundError = new Error(`Account not found on Horizon: ${address}`);
+      notFoundError.statusCode = 404;
+      return next(notFoundError);
+    }
+
+    // Handle signature verification errors
+    if (error.statusCode === 401) {
+      return next(error);
+    }
+
+    // Handle other errors
+    console.error('Registration error:', error.message);
+    const registrationError = new Error(`Registration verification failed: ${error.message}`);
     registrationError.statusCode = 500;
     return next(registrationError);
   }
@@ -500,7 +561,7 @@ app.use((err, _req, _res, next) => {
   next(err);
 });
 
-app.use((err, _req, res) => {
+app.use((err, _req, res, next) => {
   const statusCode = err.statusCode || 500;
   const errorMessage = err.message || 'Internal server error';
 

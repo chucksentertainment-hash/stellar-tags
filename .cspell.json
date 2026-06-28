@@ -1,7 +1,22 @@
 {
   "version": "0.2",
   "language": "en",
+  "ignorePaths": [
+    "**/node_modules/**"
+  ],
+  "ignoreRegExpList": [
+    "\\b[A-Z0-9]{6,}\\b"
+  ],
   "words": [
-    "Soroban"
+    "Soroban",
+    "multisigner",
+    "MULTISIGNER",
+    "GMASTER",
+    "GSIGNER",
+    "GINVALID",
+    "GDZST",
+    "GDXYZ",
+    "keypair",
+    "testuser"
   ]
 }
