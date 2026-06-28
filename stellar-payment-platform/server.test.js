@@ -13,23 +13,68 @@ jest.mock('pdfkit', () => jest.fn());
 // test process does not register a real timer.
 jest.mock('./src/cleanup-cron', () => ({ scheduleCleanupJob: jest.fn() }));
 
-jest.mock('@prisma/client', () => ({
-  Prisma: { PrismaClientKnownRequestError: class extends Error {} },
-}));
-
-// Prisma is mocked so the suite never touches a real database.
 jest.mock('./prismaClient', () => ({
   prisma: {
     user: {
       findUnique: jest.fn(),
-      findFirst: jest.fn(),
       findMany: jest.fn(),
       count: jest.fn(),
       create: jest.fn(),
+      findFirst: jest.fn(),
     },
-    $transaction: jest.fn((ops) => Promise.all(ops)),
-    $disconnect: jest.fn().mockResolvedValue(undefined),
+    $transaction: jest.fn(),
   },
+}));
+
+// Default multi-signer verifier mock for server tests
+jest.mock('./src/multisigner-verifier', () => ({
+  verifyMultiSignerThreshold: jest.fn().mockResolvedValue({
+    success: true,
+    accountId: 'GDUMMYACCOUNTIDIIIIIIIIIIIIIIIIIIIIIIIIIIIIII',
+    operationType: 'management',
+    requiredThreshold: 1,
+    totalWeight: 1,
+    signatureCount: 1,
+    uniqueSignerCount: 1,
+    signatures: [{ publicKey: 'GDUMMY', weight: 1, isValid: true }],
+    thresholds: { low_threshold: 1, med_threshold: 2, high_threshold: 3 },
+    signerCount: 1,
+    errorMessage: null,
+  }),
+  isSingleSignerAccount: jest.fn().mockReturnValue(true),
+}));
+
+jest.mock('sqlite3', () => ({
+  verbose: () => ({
+    Database: jest.fn().mockImplementation((_path, cb) => {
+      const db = {
+        run: jest.fn(function (...args) {
+          const fn = args.find((a) => typeof a === 'function');
+          if (fn) fn.call({ lastID: 0, changes: 0 }, null);
+        }),
+        serialize: jest.fn((fn) => fn && fn()),
+        close: jest.fn((cb) => cb && cb()),
+      };
+      if (cb) cb(null);
+      return db;
+    }),
+  }),
+}));
+
+jest.mock('./src/cleanup-cron', () => ({ scheduleCleanupJob: jest.fn() }));
+
+jest.mock('generic-pool', () => ({
+  createPool: jest.fn(() => ({
+    acquire: jest.fn().mockResolvedValue({
+      run: jest.fn(function (...args) {
+        const fn = args.find((a) => typeof a === 'function');
+        if (fn) fn.call({ lastID: 1, changes: 1 }, null);
+      }),
+    }),
+    release: jest.fn(),
+    drain: jest.fn().mockResolvedValue(undefined),
+    clear: jest.fn().mockResolvedValue(undefined),
+  })),
 }));
 
 describe('gracefulShutdown', () => {
@@ -202,6 +247,57 @@ describe('GET /lookup — pagination and search', () => {
 
   beforeEach(() => {
     jest.resetModules();
+
+    jest.mock('dotenv', () => ({ config: jest.fn() }));
+    jest.mock('fs', () => ({ ...jest.requireActual('fs'), mkdirSync: jest.fn() }));
+    jest.mock('@stellar/stellar-sdk', () => ({ Horizon: { Server: jest.fn() }, StrKey: { isValidEd25519PublicKey: jest.fn(() => true) } }));
+    jest.mock('pdfkit', () => jest.fn());
+    jest.mock('./src/cleanup-cron', () => ({ scheduleCleanupJob: jest.fn() }));
+
+    jest.mock('sqlite3', () => ({
+      verbose: () => ({
+        Database: jest.fn().mockImplementation((_path, cb) => {
+          const db = { run: jest.fn((sql, cb2) => cb2 && cb2(null)), close: jest.fn((cb2) => cb2 && cb2()) };
+          if (cb) cb(null);
+          return db;
+        }),
+      }),
+    }));
+
+    const mockConn = {
+      run: jest.fn((sql, params, cb) => {
+        const fn = typeof params === 'function' ? params : cb;
+        if (fn) fn.call({ lastID: 0, changes: 0 }, null);
+      }),
+      get: jest.fn((sql, params, cb) => {
+        const fn = typeof params === 'function' ? params : cb;
+        if (sql.includes('COUNT(*)')) {
+          if (fn) fn(null, { total: 2 });
+        } else if (sql.includes('WHERE address =')) {
+          if (fn) fn(null, { username: 'alice*localhost' });
+        } else {
+          if (fn) fn(null, null);
+        }
+      }),
+      all: jest.fn((sql, params, cb) => {
+        const fn = typeof params === 'function' ? params : cb;
+        const rows = [
+          { username: 'alice*localhost', address: VALID_ADDRESS, created_at: '2024-01-01T00:00:00.000Z' },
+          { username: 'bob*localhost', address: 'GBOB0000000000000000000000000000000000000000000000000000', created_at: '2024-01-02T00:00:00.000Z' },
+        ];
+        if (fn) fn(null, rows);
+      }),
+    };
+
+    jest.mock('generic-pool', () => ({
+      createPool: jest.fn(() => ({
+        acquire: jest.fn().mockResolvedValue(mockConn),
+        release: jest.fn(),
+        drain: jest.fn().mockResolvedValue(undefined),
+        clear: jest.fn().mockResolvedValue(undefined),
+      })),
+    }));
+
     ({ app } = require('./server'));
     ({ prisma } = require('./prismaClient'));
     request = require('supertest');
@@ -209,6 +305,7 @@ describe('GET /lookup — pagination and search', () => {
     prisma.user.findUnique.mockReset();
     prisma.user.findMany.mockReset();
     prisma.user.count.mockReset();
+    prisma.$transaction = jest.fn();
   });
 
   afterEach(() => {
@@ -235,6 +332,10 @@ describe('GET /lookup — pagination and search', () => {
       { username: 'alice*localhost', address: VALID_ADDRESS, createdAt: new Date('2024-01-01T00:00:00.000Z') },
       { username: 'bob*localhost', address: 'GBOB0000000000000000000000000000000000000000000000000000', createdAt: new Date('2024-01-02T00:00:00.000Z') },
     ]);
+    prisma.$transaction.mockResolvedValue([2, [
+      { username: 'alice*localhost', address: VALID_ADDRESS, createdAt: new Date('2024-01-01T00:00:00.000Z') },
+      { username: 'bob*localhost', address: 'GBOB0000000000000000000000000000000000000000000000000000', createdAt: new Date('2024-01-02T00:00:00.000Z') },
+    ]]);
 
     const res = await request(app).get('/lookup?search=alice&page=1&limit=10');
     expect(res.status).toBe(200);
@@ -247,6 +348,7 @@ describe('GET /lookup — pagination and search', () => {
   test('search mode defaults page to 1 and limit to 10 when omitted', async () => {
     prisma.user.count.mockResolvedValue(2);
     prisma.user.findMany.mockResolvedValue([]);
+    prisma.$transaction.mockResolvedValue([2, []]);
 
     const res = await request(app).get('/lookup?search=alice');
     expect(res.status).toBe(200);
@@ -261,6 +363,52 @@ describe('GET /users — pagination and search', () => {
 
   beforeEach(() => {
     jest.resetModules();
+
+    jest.mock('dotenv', () => ({ config: jest.fn() }));
+    jest.mock('fs', () => ({ ...jest.requireActual('fs'), mkdirSync: jest.fn() }));
+    jest.mock('@stellar/stellar-sdk', () => ({ Horizon: { Server: jest.fn() }, StrKey: { isValidEd25519PublicKey: jest.fn(() => true) } }));
+    jest.mock('pdfkit', () => jest.fn());
+    jest.mock('./src/cleanup-cron', () => ({ scheduleCleanupJob: jest.fn() }));
+
+    jest.mock('sqlite3', () => ({
+      verbose: () => ({
+        Database: jest.fn().mockImplementation((_path, cb) => {
+          const db = { run: jest.fn((sql, cb2) => cb2 && cb2(null)), close: jest.fn((cb2) => cb2 && cb2()) };
+          if (cb) cb(null);
+          return db;
+        }),
+      }),
+    }));
+
+    const mockConn = {
+      run: jest.fn((sql, params, cb) => {
+        const fn = typeof params === 'function' ? params : cb;
+        if (fn) fn.call({ lastID: 0, changes: 0 }, null);
+      }),
+      get: jest.fn((sql, params, cb) => {
+        const fn = typeof params === 'function' ? params : cb;
+        if (fn) fn(null, { total: 25 });
+      }),
+      all: jest.fn((sql, params, cb) => {
+        const fn = typeof params === 'function' ? params : cb;
+        const rows = Array.from({ length: 10 }, (_, i) => ({
+          username: `user${i}*localhost`,
+          address: `G${'A'.repeat(55)}${i}`,
+          created_at: '2024-01-01T00:00:00.000Z',
+        }));
+        if (fn) fn(null, rows);
+      }),
+    };
+
+    jest.mock('generic-pool', () => ({
+      createPool: jest.fn(() => ({
+        acquire: jest.fn().mockResolvedValue(mockConn),
+        release: jest.fn(),
+        drain: jest.fn().mockResolvedValue(undefined),
+        clear: jest.fn().mockResolvedValue(undefined),
+      })),
+    }));
+
     ({ app } = require('./server'));
     ({ prisma } = require('./prismaClient'));
     request = require('supertest');
@@ -276,6 +424,11 @@ describe('GET /users — pagination and search', () => {
         createdAt: new Date('2024-01-01T00:00:00.000Z'),
       })),
     );
+    prisma.$transaction = jest.fn().mockResolvedValue([25, Array.from({ length: 10 }, (_, i) => ({
+      username: `user${i}*localhost`,
+      address: `G${'A'.repeat(55)}${i}`,
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    }))]);
   });
 
   afterEach(() => {

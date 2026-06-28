@@ -39,8 +39,18 @@ jest.mock('./prismaClient', () => ({
   },
 }));
 
-const { app } = require('./server');
 const { prisma } = require('./prismaClient');
+
+// Load a fresh `app` instance inside isolated module context per test to avoid
+// cross-file mock leakage that causes inconsistent behavior when tests run
+// together in the full suite.
+const getApp = () => {
+  let app;
+  jest.isolateModules(() => {
+    app = require('./server').app;
+  });
+  return app;
+};
 
 // ---------------------------------------------------------------------------
 // Common SQL injection payloads
@@ -79,7 +89,7 @@ describe('#35 Injection safety — GET /federation (username lookup)', () => {
   test.each(INJECTION_PAYLOADS)(
     'payload is bound as a Prisma argument, never interpolated: %s',
     async (payload) => {
-      const res = await request(app).get('/federation').query({ q: payload });
+      const res = await request(getApp()).get('/federation').query({ q: payload });
 
       // Well-formed response — handled, never an unhandled crash.
       expect([200, 404]).toContain(res.status);
@@ -99,7 +109,7 @@ describe('#35 Injection safety — GET /lookup (exact address lookup)', () => {
   test.each(INJECTION_PAYLOADS)(
     'address payload is bound as a Prisma argument: %s',
     async (payload) => {
-      const res = await request(app).get('/lookup').query({ address: payload });
+      const res = await request(getApp()).get('/lookup').query({ address: payload });
 
       expect([200, 404]).toContain(res.status);
 
@@ -114,7 +124,7 @@ describe('#35 Injection safety — GET /users (paginated search)', () => {
   test.each(INJECTION_PAYLOADS)(
     'search payload is bound inside a structured contains filter: %s',
     async (payload) => {
-      const res = await request(app).get('/users').query({ search: payload });
+      const res = await request(getApp()).get('/users').query({ search: payload });
 
       expect(res.status).toBe(200);
 
@@ -131,7 +141,7 @@ describe('#35 Injection safety — POST /register (address conflict check)', () 
   test.each(INJECTION_PAYLOADS)(
     'address payload is bound as a Prisma argument: %s',
     async (payload) => {
-      const res = await request(app)
+      const res = await request(getApp())
         .post('/register')
         .send({ username: 'attacker', address: payload });
 

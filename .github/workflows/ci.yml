@@ -2,14 +2,28 @@ name: Production Safety Checks
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   backend-checks:
     name: Backend Build & Test
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: stellar_tags_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d stellar_tags_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: ./stellar-payment-platform
@@ -20,13 +34,17 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: "22"
+          cache: "npm"
           cache-dependency-path: ./stellar-payment-platform/package-lock.json
-
 
       - name: Install Backend Dependencies
         run: npm ci
+
+      - name: Apply Database Migrations
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/stellar_tags_test?schema=public
+        run: npx prisma migrate deploy --schema prisma/schema.prisma
 
       - name: Run Backend Tests
         run: npm test
@@ -40,16 +58,16 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'npm'
+          node-version: "22"
+          cache: "npm"
           cache-dependency-path: ./payment-dashboard/package-lock.json
-          
+
       - name: Install Frontend Dependencies
         run: npm ci
-        
+
       - name: Verify Vite Build (Catches Vercel Crashes)
         run: npm run build
