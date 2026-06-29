@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-"test": "jest --forceExit",
+    "test": "jest --forceExit",
     "test:integration": "TEST_API_URL=http://localhost:5001 jest --forceExit --testPathPattern=integration",
     "listener": "node horizonListener.js",
     "db:seed": "node scripts/seed.js",
@@ -23,6 +23,7 @@
     "@faker-js/faker": "^10.5.0",
     "@prisma/client": "^6.1.0",
     "@stellar/stellar-sdk": "^16.0.1",
+    "compression": "^1.8.1",
     "connect-timeout": "^1.9.1",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",

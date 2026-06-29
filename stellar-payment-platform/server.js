@@ -7,6 +7,7 @@ const { createClient } = require('redis');
 const { prisma } = require('./prismaClient');
 const { scheduleCleanupJob } = require('./src/cleanup-cron');
 const timeout = require('connect-timeout');
+const compression = require('compression');
 const v1Router = require('./src/routes/v1');
 
 require('dotenv').config();
@@ -91,6 +92,9 @@ const rejectNestedObjects = (req, res, next) => {
 };
 
 app.use(rejectNestedObjects);
+
+// Enable HTTP response compression for responses exceeding 1KB (1024 bytes)
+app.use(compression({ threshold: 1024 }));
 
 scheduleCleanupJob(prisma);
 
