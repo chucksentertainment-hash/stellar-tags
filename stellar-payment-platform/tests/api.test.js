@@ -6,6 +6,16 @@ jest.mock('@stellar/stellar-sdk', () => ({
   StrKey: { isValidEd25519PublicKey: jest.fn(() => true) }
 }));
 
+// Mock Prisma so it doesn't try to connect to a real database and crash
+jest.mock('../prismaClient', () => ({
+  prisma: {
+    user: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn().mockResolvedValue(null)
+    }
+  }
+}));
+
 const { app } = require('../server');
 
 describe('GET /federation', () => {
